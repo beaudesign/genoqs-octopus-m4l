@@ -421,8 +421,6 @@ const maxAPI = (() => {
 // Constants
 // ════════════════════════════════════════════════════
 const T = 10, S = 16;
-const GOLDEN = Math.PI * (3 - Math.sqrt(5)); // ~2.39996 rad
-
 const ATTR_LABELS = ['VEL','PIT','LEN','STA','POS','DIR','AMT','GRV','MCC','MCH'];
 const NOTE_NAMES  = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 
@@ -678,28 +676,23 @@ function renderGrid() {
 // Layers (bottom → top):
 //   1. Outer arc    — 10 track nodes on large arc (r ≈ 46% of panel)
 //   2. Parameter ring — 16 step nodes (r ≈ 30%)
-//   3. Golden spiral  — 160 step nodes (max r ≈ 18%)
+//   3. Shell spiral   — Archimedean spiral, 10 arms × 16 steps
 //   4. Controls overlay — MODE / SCALE / TRANSPORT / CHORD
 // ════════════════════════════════════════════════════
 const NS = 'http://www.w3.org/2000/svg';
 
-// We use a responsive SVG that re-lays-out when the panel resizes.
-// All positions are stored as fractions of the viewBox.
-
 let svgW = 0, svgH = 0, CX = 0, CY = 0;
 
-// Arc geometry
 let R_ARC  = 0;  // outer arc radius   (~46% of min(W,H)/2)
 let R_RING = 0;  // parameter ring     (~29%)
-let R_SPIR = 0;  // spiral max radius  (~16%)
+let R_SPIR = 0;  // shell spiral max radius (~16%)
 
 // Element references
-const arcNodeEls   = [];   // [ti] → { ball, led }
+const arcNodeEls   = [];   // [ti] → { ball, led, halo, ang }
 const ringNodeEls  = [];   // [si] → { dot }
 const spiralDotEls = [];   // [ti][si] → circle
 const spiralPhEls  = [];   // [ti] → circle
-const arcPhEls     = [];   // [ti] → circle (playhead on outer arc)
-const ringPhEl     = { dot: null };  // single playhead on ring for selected track
+const ringPhEl     = { dot: null };
 
 function mkEl(tag, attrs) {
   const el = document.createElementNS(NS, tag);
@@ -707,11 +700,30 @@ function mkEl(tag, attrs) {
   return el;
 }
 
-// Golden angle spiral: n-th node
-function spiralPt(n, total, maxR) {
-  const r = maxR * Math.sqrt((n + 0.5) / total);
-  const a = n * GOLDEN;
+// ── Archimedean shell spiral ──────────────────────────────────
+// The spiral makes SHELL_TURNS full revolutions over all T*S nodes.
+// Each track occupies SHELL_TURNS/T turns (≈ 0.8 turns each).
+// Radius grows linearly: r = R_SPIR * n / (T*S - 1)
+// Angle steps are evenly spaced around each revolution.
+const SHELL_TURNS = 8;   // total revolutions (fewer = more open/shell-like)
+const SHELL_NODES = T * S; // 160
+
+function shellPt(n) {
+  // n = 0 (innermost) → T*S-1 (outermost)
+  const r = R_SPIR * (n + 1) / SHELL_NODES;
+  const a = (n / SHELL_NODES) * SHELL_TURNS * 2 * Math.PI - Math.PI / 2;
   return { x: CX + r * Math.cos(a), y: CY + r * Math.sin(a) };
+}
+
+// Playhead position: interpolate between steps si0 and si+1 on the shell
+function shellPlayheadPt(ti, pos) {
+  const si0  = Math.floor(pos) % S;
+  const si1  = (si0 + 1) % S;
+  const frac = pos - Math.floor(pos);
+  const n0   = ti * S + si0;
+  const n1   = ti * S + si1;
+  const p0   = shellPt(n0), p1 = shellPt(n1);
+  return { x: p0.x + (p1.x - p0.x) * frac, y: p0.y + (p1.y - p0.y) * frac };
 }
 
 // Arc: 10 nodes on arc sweeping from ~-130° to +130° (260° centered top)
@@ -884,18 +896,45 @@ function buildRightPanel() {
     svg.appendChild(ringPhEl.dot);
   }
 
-  // ── 3. Golden spiral — 160 step nodes (all tracks × steps) ──
+  // ── 3. Shell spiral — Archimedean, 10 tracks × 16 steps ──
   {
-    const N = T * S;
+    // Draw the spiral guide path first (faint single continuous line)
+    const spiralPathPts = [];
+    for (let n = 0; n < SHELL_NODES; n++) {
+      const p = shellPt(n);
+      spiralPathPts.push(`${p.x.toFixed(1)},${p.y.toFixed(1)}`);
+    }
+    svg.appendChild(mkEl('polyline', {
+      points: spiralPathPts.join(' '),
+      fill: 'none',
+      stroke: 'rgba(28,24,16,.07)',
+      'stroke-width': '0.7',
+      'stroke-linejoin': 'round',
+      'stroke-linecap': 'round',
+    }));
+
+    // Per-track segment highlight lines (drawn under dots)
+    for (let ti = 0; ti < T; ti++) {
+      svg.appendChild(mkEl('polyline', {
+        fill: 'none',
+        stroke: 'rgba(28,24,16,.09)',
+        'stroke-width': '1',
+        'stroke-linejoin': 'round',
+        id: `sp-arc-${ti}`,
+      }));
+    }
+
+    // Step dots — sized to spiral thickness (~2% of max radius)
+    const dotR = Math.max(1.8, R_SPIR * 0.022);
     for (let ti = 0; ti < T; ti++) {
       spiralDotEls[ti] = [];
       for (let si = 0; si < S; si++) {
         const n   = ti * S + si;
-        const p   = spiralPt(n, N, R_SPIR);
-        const sr  = Math.max(1.4, R_SPIR * 0.040);
+        const p   = shellPt(n);
         const dot = mkEl('circle', {
           cx: p.x.toFixed(2), cy: p.y.toFixed(2),
-          r: sr.toFixed(1), fill: 'rgba(28,24,16,.09)',
+          r: dotR.toFixed(1),
+          fill: 'rgba(28,24,16,.10)',
           cursor: 'pointer',
         });
         dot.addEventListener('click', () => onStepDown(ti, si, false));
@@ -903,19 +942,11 @@ function buildRightPanel() {
         spiralDotEls[ti][si] = dot;
       }
     }
-    // Spiral guide arcs (per-track polylines)
-    for (let ti = 0; ti < T; ti++) {
-      const arc = mkEl('polyline', {
-        fill:'none', stroke:'rgba(28,24,16,.05)',
-        'stroke-width':'0.6','stroke-linejoin':'round',
-        id: `sp-arc-${ti}`,
-      });
-      svg.appendChild(arc);
-    }
-    // Playhead dots on spiral
+
+    // Playhead dots on shell
     for (let ti = 0; ti < T; ti++) {
       const ph = mkEl('circle', {
-        r: Math.max(2.5, R_SPIR * 0.055).toFixed(1),
+        r: (dotR * 1.6).toFixed(1),
         fill: 'rgba(210,32,32,.0)',
       });
       svg.appendChild(ph);
@@ -1138,51 +1169,45 @@ function updateRingNodes() {
   }
 }
 
-// ── Update spiral for one track ──
+// ── Update shell spiral for one track ──
 function updateSpiralTrack(ti) {
   if (!spiralDotEls[ti]) return;
-  const tr  = state.tracks[ti];
-  const N   = T * S;
+  const tr = state.tracks[ti];
 
-  // Guide arc
+  // Highlight the active-length segment of this track's arm
   const arcEl = document.getElementById(`sp-arc-${ti}`);
   if (arcEl) {
     const pts = [];
     for (let si = 0; si < tr.length; si++) {
-      const p = spiralPt(ti * S + si, N, R_SPIR);
+      const p = shellPt(ti * S + si);
       pts.push(`${p.x.toFixed(1)},${p.y.toFixed(1)}`);
     }
     arcEl.setAttribute('points', pts.join(' '));
   }
 
+  const baseR = Math.max(1.8, R_SPIR * 0.022);
   for (let si = 0; si < S; si++) {
     const dot = spiralDotEls[ti][si];
     const st  = tr.steps[si];
     let fill, r;
-    if (si >= tr.length)            { fill = 'rgba(28,24,16,.03)'; r = 1.2; }
-    else if (st.skip)               { fill = 'rgba(210,32,32,.70)'; r = 2.4; }
-    else if (st.hasChord && st.active) { fill = 'rgba(200,120,20,.85)'; r = 2.8; }
-    else if (st.active)             { fill = 'rgba(28,24,16,.72)'; r = 2.8; }
-    else                            { fill = 'rgba(28,24,16,.10)'; r = 2.0; }
+    if (si >= tr.length)               { fill = 'rgba(28,24,16,.03)'; r = baseR * 0.65; }
+    else if (st.skip)                  { fill = 'rgba(210,32,32,.72)'; r = baseR * 1.3;  }
+    else if (st.hasChord && st.active) { fill = 'rgba(200,120,20,.88)'; r = baseR * 1.4; }
+    else if (st.active)                { fill = 'rgba(28,24,16,.75)';  r = baseR * 1.4;  }
+    else                               { fill = 'rgba(28,24,16,.12)';  r = baseR;         }
     dot.setAttribute('fill', fill);
-    dot.setAttribute('r', r);
+    dot.setAttribute('r', r.toFixed(1));
   }
 }
 
 function _placeAllPlayheads() {
-  const N = T * S;
   for (let ti = 0; ti < T; ti++) {
     const ph = spiralPhEls[ti];
     if (!ph) continue;
-    const tr   = state.tracks[ti];
-    const si0  = Math.floor(tr.playheadPos) % S;
-    const si1  = (si0 + 1) % S;
-    const frac = tr.playheadPos - Math.floor(tr.playheadPos);
-    const p0   = spiralPt(ti * S + si0, N, R_SPIR);
-    const p1   = spiralPt(ti * S + si1, N, R_SPIR);
-    ph.setAttribute('cx', (p0.x + (p1.x - p0.x) * frac).toFixed(2));
-    ph.setAttribute('cy', (p0.y + (p1.y - p0.y) * frac).toFixed(2));
-    ph.setAttribute('fill', 'rgba(210,32,32,.88)');
+    const p = shellPlayheadPt(ti, state.tracks[ti].playheadPos);
+    ph.setAttribute('cx', p.x.toFixed(2));
+    ph.setAttribute('cy', p.y.toFixed(2));
+    ph.setAttribute('fill', 'rgba(210,32,32,.90)');
   }
   updateRingNodes();
 }
