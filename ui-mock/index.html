@@ -409,6 +409,7 @@ html, body {
 </div><!-- .device -->
 
 <script>
+'use strict';
 // ════════════════════════════════════════════════════
 // Max bridge
 // ════════════════════════════════════════════════════
@@ -418,32 +419,78 @@ const maxAPI = (() => {
 })();
 
 // ════════════════════════════════════════════════════
+// ── SPEC v0.1 ──
+// Right panel = 4 overlapping control layers:
+//   L1 Outer Arc     → segmented mode/scale/tempo buttons
+//   L2 Parameter Ring → radial mix_target selector
+//   L3 Shell Spiral   → pitch/harmonic topology (click = assign pitch)
+//   L4 Center Cluster → transport, scale, mode, main encoder
+// Playhead lives in left panel only (step flash + track LED).
+// ════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════
 // Constants
 // ════════════════════════════════════════════════════
 const T = 10, S = 16;
+
+// Mix-target attributes (encoder context, spec §2.5)
+const MIX_TARGETS = ['VEL','PIT','LEN','STA','POS','GRV','MCC'];
+// Full attr label list for left-side row labels
 const ATTR_LABELS = ['VEL','PIT','LEN','STA','POS','DIR','AMT','GRV','MCC','MCH'];
 const NOTE_NAMES  = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 
-const MODES = [
-  { id:'grid',  lbl:'GRID',  led:'white' },
-  { id:'page',  lbl:'PAGE',  led:'green' },
-  { id:'track', lbl:'TRACK', led:'off'   },
-  { id:'step',  lbl:'STEP',  led:'off'   },
-  { id:'map',   lbl:'MAP',   led:'off'   },
-  { id:'play',  lbl:'PLAY',  led:'white' },
+// ── Layer 1: Outer Arc buttons ───────────────────────
+// Two groups: MODE (left side of arc) + AUX (right side)
+const ARC_BTNS = [
+  // Mode group
+  { id:'grid',   lbl:'GRID',  group:'mode', led:'off'   },
+  { id:'page',   lbl:'PAGE',  group:'mode', led:'green' },
+  { id:'track',  lbl:'TRACK', group:'mode', led:'off'   },
+  { id:'step',   lbl:'STEP',  group:'mode', led:'off'   },
+  { id:'map',    lbl:'MAP',   group:'mode', led:'off'   },
+  { id:'play',   lbl:'PLAY',  group:'mode', led:'white' },
+  // Aux group (scale / timing)
+  { id:'scale',  lbl:'SCALE', group:'aux',  led:'off'   },
+  { id:'tempo',  lbl:'TEMPO', group:'aux',  led:'off'   },
+  { id:'chord',  lbl:'CHORD', group:'aux',  led:'off'   },
+  { id:'aln',    lbl:'ALN',   group:'aux',  led:'off'   },
 ];
 
+// ── Layer 2: Parameter Ring ──────────────────────────
+// Radial discrete mix_target selector
+const RING_TARGETS = MIX_TARGETS; // 7 items
+
+// ── Layer 3: Pitch spiral (musical topology) ─────────
+// 2 octaves chromatic, C3(48)–B4(71) = 24 nodes
+// Archimedean spiral, 2 turns so each revolution = 1 octave
+// => adjacent on arm = semitone, adjacent across arm = octave
+const PITCH_NODES = [];
+for (let i = 0; i < 24; i++) {
+  const midi   = 48 + i;              // C3 = 48
+  const pc     = midi % 12;           // pitch class 0-11
+  const octave = Math.floor(midi / 12) - 4;
+  const isSharp = [1,3,6,8,10].includes(pc);
+  PITCH_NODES.push({
+    id: i, midi, pc, octave,
+    name: NOTE_NAMES[pc] + (Math.floor(midi / 12) - 1),
+    isSharp,
+    // Musical neighbours: semitone ±1, octave ±12
+    neighbors: [i - 1, i + 1, i - 12, i + 12].filter(n => n >= 0 && n < 24),
+  });
+}
+
+// ── Layer 4: Center cluster ──────────────────────────
+const TRANSPORT = [
+  { id:'stop',  sym:'■', ledCol:'off',   on:false },
+  { id:'play',  sym:'▸', ledCol:'green', on:true  },
+  { id:'pause', sym:'⏸', ledCol:'off',   on:false },
+  { id:'rec',   sym:'●', ledCol:'red',   on:false },
+];
 const SCALE_MODES = [
-  { id:'mod', lbl:'MOD', led:'off'   },
-  { id:'sel', lbl:'SEL', led:'green' },
-  { id:'cad', lbl:'CAD', led:'off'   },
-];
-
-// Transport rows: [ id, symbol, led-colour, initially-on ]
-const TP = [
-  ['cancel','×','off',false], ['back','◂','off',false],
-  ['rec','●','red',false],    ['stop','■','off',false],
-  ['pause','⏸','off',false],  ['play','▸','green',true],
+  { id:'chromatic', lbl:'CHR' },
+  { id:'major',     lbl:'MAJ' },
+  { id:'minor',     lbl:'MIN' },
+  { id:'modal',     lbl:'MOD' },
 ];
 
 // ════════════════════════════════════════════════════
@@ -457,7 +504,10 @@ const state = {
   selectedTrack: -1,
   selectedStep:  -1,
   selectedAttr:  'vel',
+  mixTarget:     'VEL',
+  scale:         'chromatic',
   currentMode:   'page',
+  auxActive:     {},
   tracks: Array.from({ length: T }, (_, ti) => ({
     length:      16,
     direction:   1,
@@ -640,7 +690,7 @@ function onStepDown(ti, si, shift) {
   state.selectedTrack = ti;
   state.selectedStep  = si;
   renderGrid();
-  updateSpiralTrack(ti);
+  updatePitchNodes();
 }
 function onStepPaint(ti, si) {
   if (!painting) return;
@@ -648,7 +698,6 @@ function onStepPaint(ti, si) {
     state.tracks[ti].steps[si].active = painting.value;
     renderStep(ti, si);
     maxAPI.send('step_toggle', ti, si);
-    updateSpiralTrack(ti);
   }
 }
 
@@ -672,27 +721,23 @@ function renderGrid() {
 }
 
 // ════════════════════════════════════════════════════
-// RIGHT PANEL — layered SVG
-// Layers (bottom → top):
-//   1. Outer arc    — 10 track nodes on large arc (r ≈ 46% of panel)
-//   2. Parameter ring — 16 step nodes (r ≈ 30%)
-//   3. Shell spiral   — Archimedean spiral, 10 arms × 16 steps
-//   4. Controls overlay — MODE / SCALE / TRANSPORT / CHORD
+// RIGHT PANEL — Spec v0.1 layered SVG
+// L1  outer arc      — ARC_BTNS  mode/aux segmented controls (10)
+// L2  parameter ring — RING_TARGETS mix_target selector (7)
+// L3  pitch spiral   — PITCH_NODES musical topology (24, C3–B4)
+// L4  center cluster — transport + scale + encoder
+// Playheads: LEFT PANEL ONLY (step flash + track LED)
 // ════════════════════════════════════════════════════
 const NS = 'http://www.w3.org/2000/svg';
 
 let svgW = 0, svgH = 0, CX = 0, CY = 0;
+let R_ARC  = 0;   // outer arc radius  (~43% of min dim)
+let R_RING = 0;   // parameter ring    (~27%)
+let R_SPIR = 0;   // pitch spiral max  (~13%)
 
-let R_ARC  = 0;  // outer arc radius   (~46% of min(W,H)/2)
-let R_RING = 0;  // parameter ring     (~29%)
-let R_SPIR = 0;  // shell spiral max radius (~16%)
-
-// Element references
-const arcNodeEls   = [];   // [ti] → { ball, led, halo, ang }
-const ringNodeEls  = [];   // [si] → { dot }
-const spiralDotEls = [];   // [ti][si] → circle
-const spiralPhEls  = [];   // [ti] → circle
-const ringPhEl     = { dot: null };
+const arcBtnEls    = {};  // id  → { ball, led, lbl }
+const ringBtnEls   = [];  // [i] → { dot, lbl }
+const pitchNodeEls = [];  // [n] → { dot, lbl }
 
 function mkEl(tag, attrs) {
   const el = document.createElementNS(NS, tag);
@@ -700,44 +745,37 @@ function mkEl(tag, attrs) {
   return el;
 }
 
-// ── Archimedean shell spiral ──────────────────────────────────
-// The spiral makes SHELL_TURNS full revolutions over all T*S nodes.
-// Each track occupies SHELL_TURNS/T turns (≈ 0.8 turns each).
-// Radius grows linearly: r = R_SPIR * n / (T*S - 1)
-// Angle steps are evenly spaced around each revolution.
-const SHELL_TURNS = 8;   // total revolutions (fewer = more open/shell-like)
-const SHELL_NODES = T * S; // 160
-
-function shellPt(n) {
-  // n = 0 (innermost) → T*S-1 (outermost)
-  const r = R_SPIR * (n + 1) / SHELL_NODES;
-  const a = (n / SHELL_NODES) * SHELL_TURNS * 2 * Math.PI - Math.PI / 2;
+// ── Pitch spiral geometry ──────────────────────────────────────
+// 2 turns = 2 octaves. 12 nodes per revolution.
+// n=0 (C3) innermost; n=12 (C4) same angle, outer ring.
+// => adjacent on arm = semitone, same angle across = octave
+function pitchPt(n) {
+  const r = R_SPIR * (n + 1) / PITCH_NODES.length;
+  const a = (n / 12) * 2 * Math.PI - Math.PI / 2;
   return { x: CX + r * Math.cos(a), y: CY + r * Math.sin(a) };
 }
 
-// Playhead position: interpolate between steps si0 and si+1 on the shell
-function shellPlayheadPt(ti, pos) {
-  const si0  = Math.floor(pos) % S;
-  const si1  = (si0 + 1) % S;
-  const frac = pos - Math.floor(pos);
-  const n0   = ti * S + si0;
-  const n1   = ti * S + si1;
-  const p0   = shellPt(n0), p1 = shellPt(n1);
-  return { x: p0.x + (p1.x - p0.x) * frac, y: p0.y + (p1.y - p0.y) * frac };
+// ── Arc button geometry ────────────────────────────────────────
+// MODE group (6) → left semicircle  (-130° → 0°)
+// AUX  group (4) → right semicircle (  0° → +130°)
+const ARC_MODE = ARC_BTNS.filter(b => b.group === 'mode');
+const ARC_AUX  = ARC_BTNS.filter(b => b.group === 'aux');
+
+function arcBtnAngle(btn) {
+  const halfSweep = Math.PI * 0.72;
+  if (btn.group === 'mode') {
+    const i = ARC_MODE.indexOf(btn);
+    return -Math.PI * 0.72 + (i / (ARC_MODE.length - 1)) * halfSweep;
+  } else {
+    const i = ARC_AUX.indexOf(btn);
+    return (i / (ARC_AUX.length - 1)) * halfSweep;
+  }
 }
 
-// Arc: 10 nodes on arc sweeping from ~-130° to +130° (260° centered top)
-function arcPt(ti) {
-  const startA = -Math.PI * 0.72;    // ~-130°
-  const sweep  =  Math.PI * 1.44;    // ~260°
-  const a = startA + (ti / (T - 1)) * sweep;
-  return { x: CX + R_ARC * Math.cos(a), y: CY + R_ARC * Math.sin(a) };
-}
-
-// Ring: 16 nodes, full circle, top-start
-function ringPt(si) {
-  const a = (si / S) * 2 * Math.PI - Math.PI / 2;
-  return { x: CX + R_RING * Math.cos(a), y: CY + R_RING * Math.sin(a) };
+// ── Ring target geometry ───────────────────────────────────────
+function ringTargetPt(i) {
+  const a = (i / RING_TARGETS.length) * 2 * Math.PI - Math.PI / 2;
+  return { x: CX + R_RING * Math.cos(a), y: CY + R_RING * Math.sin(a), a };
 }
 
 function buildRightPanel() {
@@ -747,494 +785,431 @@ function buildRightPanel() {
   svgW = rect.width  || 500;
   svgH = rect.height || 500;
   CX   = svgW * 0.52;
-  CY   = svgH * 0.46;
+  CY   = svgH * 0.47;
 
   const minDim = Math.min(svgW, svgH);
   R_ARC  = minDim * 0.43;
-  R_RING = minDim * 0.275;
-  R_SPIR = minDim * 0.155;
+  R_RING = minDim * 0.27;
+  R_SPIR = minDim * 0.13;
 
   svg.setAttribute('viewBox', `0 0 ${svgW} ${svgH}`);
   svg.innerHTML = '';
+  pitchNodeEls.length = 0;
+  ringBtnEls.length   = 0;
+  Object.keys(arcBtnEls).forEach(k => delete arcBtnEls[k]);
 
-  // ── 0. Faint guide circles ──
+  const defs = svg.appendChild(mkEl('defs', {}));
+
+  // ── Guide circles (faint dashed) ──
   [R_ARC, R_RING].forEach(r => {
     svg.appendChild(mkEl('circle', {
       cx: CX, cy: CY, r,
-      fill: 'none', stroke: 'rgba(28,24,16,.05)', 'stroke-width':'0.8',
+      fill: 'none', stroke: 'rgba(28,24,16,.05)', 'stroke-width': '0.8',
       'stroke-dasharray': '3 5',
     }));
   });
 
-  // ── 1. Outer arc — arc curve line ──
+  // ── Arc guide line (260° sweep) ──
   {
-    const startA = -Math.PI * 0.72;
-    const sweep  =  Math.PI * 1.44;
-    const x1 = CX + R_ARC * Math.cos(startA);
-    const y1 = CY + R_ARC * Math.sin(startA);
-    const x2 = CX + R_ARC * Math.cos(startA + sweep);
-    const y2 = CY + R_ARC * Math.sin(startA + sweep);
-    const largeArc = sweep > Math.PI ? 1 : 0;
+    const a0 = -Math.PI * 0.72, a1 = Math.PI * 0.72;
+    const x0 = CX + R_ARC * Math.cos(a0), y0 = CY + R_ARC * Math.sin(a0);
+    const x1 = CX + R_ARC * Math.cos(a1), y1 = CY + R_ARC * Math.sin(a1);
     svg.appendChild(mkEl('path', {
-      d: `M ${x1.toFixed(1)},${y1.toFixed(1)} A ${R_ARC},${R_ARC} 0 ${largeArc},1 ${x2.toFixed(1)},${y2.toFixed(1)}`,
-      fill: 'none', stroke: 'rgba(28,24,16,.10)', 'stroke-width':'1',
+      d: `M ${x0.toFixed(1)},${y0.toFixed(1)} A ${R_ARC},${R_ARC} 0 1,1 ${x1.toFixed(1)},${y1.toFixed(1)}`,
+      fill: 'none', stroke: 'rgba(28,24,16,.08)', 'stroke-width': '1',
     }));
   }
 
-  // ── 1. Outer arc nodes (one per track, large ball) ──
-  for (let ti = 0; ti < T; ti++) {
-    const p    = arcPt(ti);
-    const r    = R_ARC * 0.068;  // node radius scaled to arc
-    const r2   = r * 1.9;
-
-    // Halo (shows track length indicator)
-    const halo = mkEl('circle', {
-      cx: p.x.toFixed(1), cy: p.y.toFixed(1),
-      r: r2.toFixed(1),
-      fill: 'none', stroke: 'rgba(28,24,16,.08)', 'stroke-width':'1',
-    });
-    svg.appendChild(halo);
-
-    // Ball body
-    const ballId = `arc-ball-grad-${ti}`;
-    const defs   = svg.querySelector('defs') || svg.appendChild(mkEl('defs', {}));
-
-    // Radial gradient for arc ball
-    const grad = mkEl('radialGradient', {
-      id: ballId, cx:'35%', cy:'30%', r:'65%',
-      fx:'35%', fy:'30%',
-    });
-    grad.innerHTML =
-      `<stop offset="0%" stop-color="#dedad0"/>` +
-      `<stop offset="40%" stop-color="#aca89e"/>` +
-      `<stop offset="70%" stop-color="#807870"/>` +
-      `<stop offset="100%" stop-color="#5c5450"/>`;
-    defs.appendChild(grad);
-
-    const ball = mkEl('circle', {
-      cx: p.x.toFixed(1), cy: p.y.toFixed(1),
-      r: r.toFixed(1),
-      fill: `url(#${ballId})`,
-      'filter': `drop-shadow(0 ${(r*0.15).toFixed(1)}px ${(r*0.4).toFixed(1)}px rgba(0,0,0,.35))`,
-      cursor: 'pointer',
-    });
-    svg.appendChild(ball);
-
-    // Track number label
-    const ang  = -Math.PI * 0.72 + (ti / (T-1)) * Math.PI * 1.44;
-    const lx   = CX + (R_ARC + r * 2.2) * Math.cos(ang);
-    const ly   = CY + (R_ARC + r * 2.2) * Math.sin(ang);
-    const lbl  = mkEl('text', {
-      x: lx.toFixed(1), y: ly.toFixed(1),
-      'text-anchor':'middle','dominant-baseline':'central',
-      'font-size': Math.max(7, r * 0.9).toFixed(1),
-      'font-family': '-apple-system,Helvetica Neue,sans-serif',
-      fill: 'rgba(28,24,16,.40)',
-    });
-    lbl.textContent = ti;
-    svg.appendChild(lbl);
-
-    // LED dot
-    const led = mkEl('circle', {
-      cx: p.x.toFixed(1),
-      cy: (p.y + r + 3).toFixed(1),
-      r: '2.5', fill: 'rgba(28,24,16,.10)',
-    });
-    svg.appendChild(led);
-
-    arcNodeEls[ti] = { ball, led, halo, ang };
-  }
-
-  // Note labels around outer arc (just outside nodes)
-  for (let ni = 0; ni < 12; ni++) {
-    const a    = (ni / 12) * 2 * Math.PI - Math.PI / 2;
-    const nr   = R_ARC + R_ARC * 0.14;
-    const isSharp = NOTE_NAMES[ni].includes('#');
-    svg.appendChild(mkEl('text', {
-      x: (CX + nr * Math.cos(a)).toFixed(1),
-      y: (CY + nr * Math.sin(a)).toFixed(1),
-      'text-anchor':'middle', 'dominant-baseline':'central',
-      'font-size': Math.max(6.5, R_ARC * 0.048).toFixed(1),
-      'font-family':'-apple-system,Helvetica Neue,sans-serif',
-      fill: isSharp ? 'rgba(28,24,16,.52)' : 'rgba(28,24,16,.36)',
-      'font-weight': isSharp ? '600' : '400',
-    })).textContent = NOTE_NAMES[ni];
-  }
-
-  // ── 2. Parameter ring — 16 step nodes ──
+  // ════ L1: Outer Arc — ARC_BTNS ════
   {
-    const pr = R_RING * 0.055;
-    for (let si = 0; si < S; si++) {
-      const p   = ringPt(si);
-      const dot = mkEl('circle', {
-        cx: p.x.toFixed(1), cy: p.y.toFixed(1),
-        r: pr.toFixed(1),
-        fill: 'rgba(28,24,16,.12)',
-        cursor: 'pointer',
+    const bR = R_ARC * 0.062;
+    const lR = 2.1;
+    const fs = Math.max(6.5, R_ARC * 0.044);
+
+    ARC_BTNS.forEach(btn => {
+      const angle = arcBtnAngle(btn);
+      const px = CX + R_ARC * Math.cos(angle);
+      const py = CY + R_ARC * Math.sin(angle);
+
+      // Ball gradient
+      const gid  = `arc-g-${btn.id}`;
+      const grad = mkEl('radialGradient', { id: gid, cx:'35%', cy:'30%', r:'65%', fx:'35%', fy:'30%' });
+      grad.innerHTML =
+        `<stop offset="0%" stop-color="#dedad0"/>` +
+        `<stop offset="40%" stop-color="#aca89e"/>` +
+        `<stop offset="70%" stop-color="#807870"/>` +
+        `<stop offset="100%" stop-color="#5c5450"/>`;
+      defs.appendChild(grad);
+
+      const g = mkEl('g', { cursor: 'pointer', id: `arc-${btn.id}` });
+
+      const ball = mkEl('circle', {
+        cx: px.toFixed(1), cy: py.toFixed(1), r: bR.toFixed(1),
+        fill: `url(#${gid})`,
+        filter: `drop-shadow(0 ${(bR*0.15).toFixed(1)}px ${(bR*0.35).toFixed(1)}px rgba(0,0,0,.28))`,
       });
-      svg.appendChild(dot);
 
-      // Step number label
-      const a  = (si / S) * 2 * Math.PI - Math.PI / 2;
-      const lx = CX + (R_RING + pr * 2.4) * Math.cos(a);
-      const ly = CY + (R_RING + pr * 2.4) * Math.sin(a);
-      svg.appendChild(mkEl('text', {
-        x: lx.toFixed(1), y: ly.toFixed(1),
-        'text-anchor':'middle','dominant-baseline':'central',
-        'font-size': Math.max(5, pr * 0.85).toFixed(1),
-        'font-family':'-apple-system,Helvetica Neue,sans-serif',
-        fill: 'rgba(28,24,16,.30)',
-      })).textContent = si + 1;
+      // LED radially outward from ball
+      const ledDist = R_ARC + bR * 2.1;
+      const ledX = CX + ledDist * Math.cos(angle);
+      const ledY = CY + ledDist * Math.sin(angle);
+      const ledFill =
+        btn.led === 'green' ? '#46d020' :
+        btn.led === 'white' ? '#e0e0d4' :
+        btn.led === 'amber' ? '#d88820' : 'rgba(28,24,16,.12)';
+      const led = mkEl('circle', {
+        cx: ledX.toFixed(1), cy: ledY.toFixed(1), r: lR.toFixed(1), fill: ledFill,
+      });
+      if (btn.led !== 'off') led.setAttribute('filter', `drop-shadow(0 0 2px ${ledFill})`);
 
-      ringNodeEls[si] = { dot };
-    }
-    // Ring playhead
-    ringPhEl.dot = mkEl('circle', {
-      r: (pr * 1.3).toFixed(1),
-      fill: 'rgba(210,32,32,.80)',
+      // Label further outward
+      const lblDist = R_ARC + bR * 4.5;
+      const lbl = mkEl('text', {
+        x: (CX + lblDist * Math.cos(angle)).toFixed(1),
+        y: (CY + lblDist * Math.sin(angle)).toFixed(1),
+        'text-anchor': 'middle', 'dominant-baseline': 'central',
+        'font-size': fs.toFixed(1),
+        'font-family': '-apple-system,Helvetica Neue,sans-serif',
+        'letter-spacing': '0.07em',
+        fill: 'rgba(28,24,16,.48)',
+      });
+      lbl.textContent = btn.lbl;
+
+      g.append(ball, led, lbl);
+      g.addEventListener('click', () => onArcBtn(btn.id));
+      svg.appendChild(g);
+      arcBtnEls[btn.id] = { ball, led, lbl };
     });
-    svg.appendChild(ringPhEl.dot);
   }
 
-  // ── 3. Shell spiral — Archimedean, 10 tracks × 16 steps ──
+  // ════ L2: Parameter Ring — RING_TARGETS (7 mix_target positions) ════
   {
-    // Draw the spiral guide path first (faint single continuous line)
-    const spiralPathPts = [];
-    for (let n = 0; n < SHELL_NODES; n++) {
-      const p = shellPt(n);
-      spiralPathPts.push(`${p.x.toFixed(1)},${p.y.toFixed(1)}`);
-    }
+    const rR = R_RING * 0.070;
+    const fs = Math.max(6, R_RING * 0.048);
+    RING_TARGETS.forEach((tgt, i) => {
+      const { x: px, y: py, a } = ringTargetPt(i);
+      const isActive = (tgt === state.mixTarget);
+
+      const dot = mkEl('circle', {
+        cx: px.toFixed(1), cy: py.toFixed(1), r: rR.toFixed(1),
+        fill: isActive ? 'rgba(28,24,16,.62)' : 'rgba(28,24,16,.11)',
+        stroke: isActive ? 'rgba(28,24,16,.78)' : 'rgba(28,24,16,.18)',
+        'stroke-width': '0.8', cursor: 'pointer',
+      });
+
+      const lblDist = R_RING + rR * 2.9;
+      const lbl = mkEl('text', {
+        x: (CX + lblDist * Math.cos(a)).toFixed(1),
+        y: (CY + lblDist * Math.sin(a)).toFixed(1),
+        'text-anchor': 'middle', 'dominant-baseline': 'central',
+        'font-size': fs.toFixed(1),
+        'font-family': '-apple-system,Helvetica Neue,sans-serif',
+        'letter-spacing': '0.10em',
+        'font-weight': isActive ? '700' : '400',
+        fill: isActive ? 'rgba(28,24,16,.75)' : 'rgba(28,24,16,.35)',
+      });
+      lbl.textContent = tgt;
+
+      dot.addEventListener('click', () => onRingTarget(tgt, i));
+      svg.appendChild(dot);
+      svg.appendChild(lbl);
+      ringBtnEls[i] = { dot, lbl };
+    });
+  }
+
+  // ════ L3: Pitch Spiral — musical topology ════
+  // Archimedean, 2 turns, 24 nodes (C3–B4)
+  // Each revolution = 1 octave → octave adjacency is radial
+  {
+    // Spiral guide path
+    const spiralPts = PITCH_NODES.map((_, n) => {
+      const p = pitchPt(n);
+      return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+    });
     svg.appendChild(mkEl('polyline', {
-      points: spiralPathPts.join(' '),
-      fill: 'none',
-      stroke: 'rgba(28,24,16,.07)',
-      'stroke-width': '0.7',
-      'stroke-linejoin': 'round',
-      'stroke-linecap': 'round',
+      points: spiralPts.join(' '),
+      fill: 'none', stroke: 'rgba(28,24,16,.07)',
+      'stroke-width': '0.7', 'stroke-linejoin': 'round',
     }));
 
-    // Per-track segment highlight lines (drawn under dots)
-    for (let ti = 0; ti < T; ti++) {
-      svg.appendChild(mkEl('polyline', {
-        fill: 'none',
-        stroke: 'rgba(28,24,16,.09)',
-        'stroke-width': '1',
-        'stroke-linejoin': 'round',
-        id: `sp-arc-${ti}`,
+    // Octave connector lines (n ↔ n+12, same pitch class, one octave apart)
+    for (let n = 0; n < 12; n++) {
+      const p0 = pitchPt(n), p1 = pitchPt(n + 12);
+      svg.appendChild(mkEl('line', {
+        x1: p0.x.toFixed(1), y1: p0.y.toFixed(1),
+        x2: p1.x.toFixed(1), y2: p1.y.toFixed(1),
+        stroke: 'rgba(28,24,16,.07)', 'stroke-width': '0.5',
+        'stroke-dasharray': '1.5 2.5',
       }));
     }
 
-    // Step dots — sized to spiral thickness (~2% of max radius)
-    const dotR = Math.max(1.8, R_SPIR * 0.022);
-    for (let ti = 0; ti < T; ti++) {
-      spiralDotEls[ti] = [];
-      for (let si = 0; si < S; si++) {
-        const n   = ti * S + si;
-        const p   = shellPt(n);
-        const dot = mkEl('circle', {
-          cx: p.x.toFixed(2), cy: p.y.toFixed(2),
-          r: dotR.toFixed(1),
-          fill: 'rgba(28,24,16,.10)',
-          cursor: 'pointer',
-        });
-        dot.addEventListener('click', () => onStepDown(ti, si, false));
-        svg.appendChild(dot);
-        spiralDotEls[ti][si] = dot;
-      }
-    }
+    // Pitch nodes
+    const fsLbl = Math.max(4.5, R_SPIR * 0.038);
+    PITCH_NODES.forEach((node, n) => {
+      const p  = pitchPt(n);
+      const nr = node.isSharp
+        ? Math.max(2.0, R_SPIR * 0.040)
+        : Math.max(2.6, R_SPIR * 0.054);
 
-    // Playhead dots on shell
-    for (let ti = 0; ti < T; ti++) {
-      const ph = mkEl('circle', {
-        r: (dotR * 1.6).toFixed(1),
-        fill: 'rgba(210,32,32,.0)',
+      const dot = mkEl('circle', {
+        cx: p.x.toFixed(1), cy: p.y.toFixed(1), r: nr.toFixed(1),
+        fill:   node.isSharp ? 'rgba(28,24,16,.22)' : 'rgba(28,24,16,.14)',
+        stroke: node.isSharp ? 'rgba(28,24,16,.36)' : 'rgba(28,24,16,.26)',
+        'stroke-width': '0.7', cursor: 'pointer',
       });
-      svg.appendChild(ph);
-      spiralPhEls[ti] = ph;
-    }
+
+      const lbl = mkEl('text', {
+        x: (p.x + nr * 1.65).toFixed(1),
+        y: (p.y + nr * 0.4).toFixed(1),
+        'font-size': fsLbl.toFixed(1),
+        'font-family': '-apple-system,Helvetica Neue,sans-serif',
+        fill: node.isSharp ? 'rgba(28,24,16,.28)' : 'rgba(28,24,16,.40)',
+        'pointer-events': 'none',
+      });
+      lbl.textContent = node.name;
+
+      dot.addEventListener('click', () => onPitchNode(n));
+      svg.appendChild(dot);
+      svg.appendChild(lbl);
+      pitchNodeEls[n] = { dot, lbl };
+    });
   }
 
-  // ── 4. Controls overlay — drawn into SVG ──
-  buildControlsSVG(svg);
+  // ════ L4: Center Cluster ════
+  buildCenterCluster(svg, defs);
 
-  // Populate data
-  for (let ti = 0; ti < T; ti++) updateSpiralTrack(ti);
+  // Initial state paint
   updateArcNodes();
   updateRingNodes();
-  _placeAllPlayheads();
+  updatePitchNodes();
 }
 
-// ── Controls drawn as SVG ──
-function buildControlsSVG(svg) {
-  const fs  = Math.max(7, svgH * 0.014);   // base font size
-  const bR  = Math.max(5, svgH * 0.011);   // button ball radius
-  const lR  = 2.5;                          // LED radius
-  const lnH = fs * 1.9;                     // line height
+// ── L4: Center cluster (transport + scale + encoder) ──────────
+function buildCenterCluster(svg, defs) {
+  const fs = Math.max(7, svgH * 0.013);
+  const bR = Math.max(4.5, svgH * 0.010);
+  const lR = 1.9;
 
-  // Control cluster sits left of center, vertically centered
-  const gx = CX - R_ARC * 0.62;
-  let   gy = CY - R_ARC * 0.50;
+  // Center cluster below/near the spiral
+  const gx = CX;
+  const gy = CY + R_SPIR * 0.30;
 
-  function sectionLabel(parent, x, y, text) {
-    parent.appendChild(mkEl('text', {
-      x, y: y + fs * 0.9,
-      'font-size': (fs * 0.72).toFixed(1),
-      'font-family':'-apple-system,Helvetica Neue,sans-serif',
-      'letter-spacing':'0.18em',
-      fill:'rgba(28,24,16,.40)',
-    })).textContent = text;
-  }
+  // ── Transport row ──
+  const tpY = gy - bR * 3.2;
+  TRANSPORT.forEach((t, i) => {
+    const tx = gx + (i - (TRANSPORT.length - 1) / 2) * (bR * 2.5);
+    const g  = mkEl('g', { cursor: 'pointer', id: `tp-${t.id}` });
 
-  function modeButton(parent, x, y, id, lbl, ledColor) {
-    const g = mkEl('g', { cursor:'pointer', id:`mb-${id}` });
+    const gid = `tp-g-${t.id}`;
+    const gr  = mkEl('radialGradient', { id: gid, cx:'35%', cy:'30%', r:'65%', fx:'35%', fy:'30%' });
+    gr.innerHTML = t.on
+      ? `<stop offset="0%" stop-color="#707070"/><stop offset="100%" stop-color="#282828"/>`
+      : `<stop offset="0%" stop-color="#dedad0"/><stop offset="100%" stop-color="#a0988e"/>`;
+    defs.appendChild(gr);
+
     const ball = mkEl('circle', {
-      cx: x, cy: y, r: bR,
-      fill:'rgba(28,24,16,.07)',
-      stroke:'rgba(28,24,16,.15)', 'stroke-width':'0.6',
+      cx: tx, cy: tpY, r: bR,
+      fill: `url(#${gid})`,
+      filter: `drop-shadow(0 1px 3px rgba(0,0,0,.28))`,
     });
+    const ledFill =
+      t.ledCol === 'green' ? '#46d020' :
+      t.ledCol === 'red'   ? '#d42020' :
+      t.ledCol === 'amber' ? '#d88820' : 'rgba(28,24,16,.12)';
     const led = mkEl('circle', {
-      cx: x, cy: (y - bR - lR - 1),
-      r: lR,
-      fill: ledColor === 'green' ? '#46d020' :
-            ledColor === 'white' ? '#e0e0d4' :
-            ledColor === 'amber' ? '#d88820' : 'rgba(28,24,16,.10)',
+      cx: tx, cy: tpY - bR - lR - 1, r: lR, fill: ledFill,
     });
-    if (ledColor === 'green') led.setAttribute('filter', `drop-shadow(0 0 2px #46d020)`);
-    if (ledColor === 'white') led.setAttribute('filter', `drop-shadow(0 0 1.5px #e0e0d4)`);
-    const txt = mkEl('text', {
-      x: x + bR + 3, y: y + fs * 0.38,
-      'font-size': (fs * 0.78).toFixed(1),
-      'font-family':'-apple-system,Helvetica Neue,sans-serif',
-      'letter-spacing':'0.10em',
-      fill:'rgba(28,24,16,.60)',
+    if (t.ledCol !== 'off') led.setAttribute('filter', `drop-shadow(0 0 2.5px ${ledFill})`);
+    const sym = mkEl('text', {
+      x: tx, y: (tpY + fs * 0.32).toFixed(1),
+      'text-anchor': 'middle', 'dominant-baseline': 'central',
+      'font-size': (fs * 0.70).toFixed(1),
+      'font-family': '-apple-system,sans-serif',
+      fill: t.on ? '#e8e4dc' : 'rgba(28,24,16,.48)',
     });
-    txt.textContent = lbl;
-    g.append(ball, led, txt);
-    g.addEventListener('click', () => setMode(id, g, led));
-    parent.appendChild(g);
-  }
-
-  // ── MODE box ──
-  const modeG = mkEl('g', {});
-  const boxPad = bR * 1.5;
-  const modeX  = gx;
-  const modeY  = gy;
-  const modeW  = (bR * 2 + 3 + fs * 4.2) * 2 + boxPad * 1.5;
-  const modeH  = Math.ceil(MODES.length / 2) * lnH + boxPad * 2 + fs;
-  svg.appendChild(mkEl('rect', {
-    x: (modeX - boxPad).toFixed(1), y: (modeY - boxPad).toFixed(1),
-    width: modeW.toFixed(1), height: modeH.toFixed(1),
-    rx:'4', fill:'rgba(240,237,229,.65)',
-    stroke:'rgba(28,24,16,.10)', 'stroke-width':'0.8',
-  }));
-  sectionLabel(modeG, modeX, modeY, 'MODE');
-
-  const cols = 2, colW = modeW / 2;
-  MODES.forEach((m, i) => {
-    const col = i % cols;
-    const row = Math.floor(i / cols);
-    modeButton(modeG, modeX + col * colW, modeY + fs * 1.2 + row * lnH, m.id, m.lbl, m.led);
+    sym.textContent = t.sym;
+    g.append(ball, led, sym);
+    g.addEventListener('click', () => onTransport(t.id));
+    svg.appendChild(g);
   });
-  svg.appendChild(modeG);
-  gy += modeH + boxPad * 1.4;
 
-  // ── SCALE ──
-  const scaleG = mkEl('g', {});
-  sectionLabel(scaleG, gx, gy, 'SCALE');
-  SCALE_MODES.forEach((s, i) => {
-    modeButton(scaleG, gx + i * (colW * 0.65), gy + fs * 1.2, s.id, s.lbl, s.led);
-  });
-  svg.appendChild(scaleG);
-  gy += lnH + fs * 1.5;
-
-  // ── TRANSPORT ──
-  const tpG = mkEl('g', {});
-  sectionLabel(tpG, gx, gy, 'TRANSPORT');
-  TP.forEach(([id, sym, led, on], i) => {
-    const tx = gx + i * (bR * 2 + 7);
-    const ty = gy + fs * 1.8;
-    const g  = mkEl('g', { cursor:'pointer', id:`tp-${id}` });
-    const ball = mkEl('circle', {
-      cx: tx, cy: ty, r: bR,
-      fill: on ? 'rgba(28,24,16,.72)' : 'rgba(28,24,16,.08)',
-      stroke:'rgba(28,24,16,.18)', 'stroke-width':'0.7',
-    });
-    const tled = mkEl('circle', {
-      cx: tx, cy: ty - bR - lR - 1, r: lR,
-      fill: led === 'green' ? '#46d020' :
-            led === 'red'   ? '#d42020' :
-            led === 'amber' ? '#d88820' : 'rgba(28,24,16,.10)',
-    });
-    if (led !== 'off') tled.setAttribute('filter', `drop-shadow(0 0 2px currentColor)`);
-    const stxt = mkEl('text', {
-      x: tx, y: ty + fs * 0.40,
-      'text-anchor':'middle','dominant-baseline':'central',
-      'font-size':(fs * 0.68).toFixed(1),
-      'font-family':'-apple-system,sans-serif',
-      fill: on ? '#f0ede5' : 'rgba(28,24,16,.55)',
-    });
-    stxt.textContent = sym;
-    g.append(ball, tled, stxt);
-    g.addEventListener('click', () => onTransport(id, ball, stxt, tled));
-    tpG.appendChild(g);
-  });
-  svg.appendChild(tpG);
-  gy += lnH * 1.5 + bR * 2;
-
-  // ── CHORD label ──
+  // ── Scale selector ──
+  const scY = gy + bR * 0.6;
   svg.appendChild(mkEl('text', {
-    x: (gx + colW).toFixed(1), y: gy.toFixed(1),
-    'font-size': (fs * 0.72).toFixed(1),
-    'font-family':'-apple-system,Helvetica Neue,sans-serif',
-    'letter-spacing':'0.18em',
-    fill:'rgba(28,24,16,.30)',
-  })).textContent = 'CHORD';
+    x: gx, y: (scY - bR * 1.9).toFixed(1),
+    'text-anchor': 'middle',
+    'font-size': (fs * 0.62).toFixed(1),
+    'font-family': '-apple-system,Helvetica Neue,sans-serif',
+    'letter-spacing': '0.14em',
+    fill: 'rgba(28,24,16,.32)',
+  })).textContent = 'SCALE';
 
-  // ── Main encoder (large ball top-right of arc) ──
-  const ex = CX + R_ARC * 1.12;
-  const ey = CY - R_ARC * 0.70;
-  const eR = bR * 2.5;
-  const eGradId = 'enc-grad';
-  const eDefs = svg.querySelector('defs') || svg.appendChild(mkEl('defs', {}));
-  const eGrad = mkEl('radialGradient', { id: eGradId, cx:'33%', cy:'28%', r:'65%', fx:'33%', fy:'28%' });
-  eGrad.innerHTML = `<stop offset="0%" stop-color="#e0dcd4"/><stop offset="45%" stop-color="#b0a89e"/><stop offset="100%" stop-color="#6c6460"/>`;
-  eDefs.appendChild(eGrad);
+  SCALE_MODES.forEach((sc, i) => {
+    const sx = gx + (i - (SCALE_MODES.length - 1) / 2) * (bR * 2.2);
+    const isActive = (sc.id === state.scale);
+    const g = mkEl('g', { cursor: 'pointer', id: `sc-${sc.id}` });
+    const ball = mkEl('circle', {
+      cx: sx, cy: scY, r: (bR * 0.70).toFixed(1),
+      fill: isActive ? 'rgba(28,24,16,.52)' : 'rgba(28,24,16,.09)',
+      stroke: 'rgba(28,24,16,.18)', 'stroke-width': '0.6',
+    });
+    const lbl = mkEl('text', {
+      x: sx, y: (scY + bR * 1.55).toFixed(1),
+      'text-anchor': 'middle',
+      'font-size': (fs * 0.57).toFixed(1),
+      'font-family': '-apple-system,Helvetica Neue,sans-serif',
+      fill: isActive ? 'rgba(28,24,16,.68)' : 'rgba(28,24,16,.30)',
+    });
+    lbl.textContent = sc.lbl;
+    g.append(ball, lbl);
+    g.addEventListener('click', () => onScaleMode(sc.id));
+    svg.appendChild(g);
+  });
+
+  // ── Main encoder (top-right quadrant, large metallic ball) ──
+  const eR  = Math.max(10, svgH * 0.029);
+  const ex  = CX + R_ARC * 1.10;
+  const ey  = CY - R_ARC * 0.64;
+  const eid = 'enc-main-g';
+  const eg  = mkEl('radialGradient', { id: eid, cx:'33%', cy:'28%', r:'65%', fx:'33%', fy:'28%' });
+  eg.innerHTML =
+    `<stop offset="0%" stop-color="#e4e0d8"/>` +
+    `<stop offset="40%" stop-color="#b8b0a4"/>` +
+    `<stop offset="75%" stop-color="#8c8478"/>` +
+    `<stop offset="100%" stop-color="#6c6460"/>`;
+  defs.appendChild(eg);
   svg.appendChild(mkEl('circle', {
     cx: ex, cy: ey, r: eR,
-    fill: `url(#${eGradId})`,
-    'filter': `drop-shadow(0 2px 5px rgba(0,0,0,.38))`,
+    fill: `url(#${eid})`,
+    filter: `drop-shadow(0 3px 7px rgba(0,0,0,.42))`,
+    cursor: 'pointer',
   }));
-  // Shine
   svg.appendChild(mkEl('ellipse', {
-    cx: (ex - eR * 0.2).toFixed(1), cy: (ey - eR * 0.25).toFixed(1),
-    rx: (eR * 0.32).toFixed(1), ry: (eR * 0.22).toFixed(1),
-    fill: 'rgba(255,255,255,.50)',
+    cx: (ex - eR * 0.20).toFixed(1), cy: (ey - eR * 0.26).toFixed(1),
+    rx: (eR * 0.30).toFixed(1),      ry: (eR * 0.20).toFixed(1),
+    fill: 'rgba(255,255,255,.46)', 'pointer-events': 'none',
   }));
-  // Label
   svg.appendChild(mkEl('text', {
-    x: ex, y: (ey + eR + fs).toFixed(1),
-    'text-anchor':'middle',
-    'font-size': (fs * 0.68).toFixed(1),
-    'font-family':'-apple-system,sans-serif',
-    'letter-spacing':'0.14em',
-    fill:'rgba(28,24,16,.35)',
+    x: ex, y: (ey + eR + fs * 1.05).toFixed(1),
+    'text-anchor': 'middle',
+    'font-size': (fs * 0.64).toFixed(1),
+    'font-family': '-apple-system,Helvetica Neue,sans-serif',
+    'letter-spacing': '0.14em',
+    fill: 'rgba(28,24,16,.33)',
   })).textContent = 'TEMPO';
 }
 
-// ── Update arc nodes (track state) ──
+// ── Update L1: Arc button LEDs / labels ───────────────────────
 function updateArcNodes() {
-  for (let ti = 0; ti < T; ti++) {
-    const el = arcNodeEls[ti];
-    if (!el) continue;
-    const tr = state.tracks[ti];
-    // Color the LED
-    const ledFill = tr.muted ? 'rgba(28,24,16,.10)' : '#46d020';
-    const ledGlow = tr.muted ? '' : 'drop-shadow(0 0 2px #46d020)';
-    el.led.setAttribute('fill', ledFill);
-    if (ledGlow) el.led.setAttribute('filter', ledGlow);
-    // Halo shows track length as arc stroke-dasharray
-    const haloR   = parseFloat(el.halo.getAttribute('r'));
-    const haloC   = 2 * Math.PI * haloR;
-    const dash    = (tr.length / S) * haloC;
-    el.halo.setAttribute('stroke-dasharray', `${dash.toFixed(1)} ${(haloC - dash).toFixed(1)}`);
-    el.halo.setAttribute('stroke-dashoffset', `${(haloC * 0.25).toFixed(1)}`);
-    el.halo.setAttribute('transform', `rotate(-90,${CX},${CY})`);
-    el.halo.setAttribute('stroke', 'rgba(28,24,16,.22)');
-    el.halo.setAttribute('stroke-width', '1.8');
-  }
+  ARC_BTNS.forEach(btn => {
+    const els = arcBtnEls[btn.id];
+    if (!els) return;
+    const isActive = btn.group === 'mode'
+      ? state.currentMode === btn.id
+      : !!(state.auxActive?.[btn.id]);
+    const litCol =
+      btn.led === 'green' ? '#46d020' :
+      btn.led === 'white' ? '#e0e0d4' :
+      btn.led === 'amber' ? '#d88820' : '#46d020';
+    const fill = isActive ? litCol : 'rgba(28,24,16,.12)';
+    els.led.setAttribute('fill', fill);
+    if (isActive) els.led.setAttribute('filter', `drop-shadow(0 0 3px ${litCol})`);
+    else          els.led.removeAttribute('filter');
+    els.lbl.setAttribute('fill', isActive ? 'rgba(28,24,16,.80)' : 'rgba(28,24,16,.45)');
+    els.lbl.setAttribute('font-weight', isActive ? '600' : '400');
+  });
 }
 
-// ── Update ring nodes (selected track's steps) ──
+// ── Update L2: Ring target dots ───────────────────────────────
 function updateRingNodes() {
-  const ti = Math.max(0, state.selectedTrack);
-  const tr = state.tracks[ti];
-  for (let si = 0; si < S; si++) {
-    const el = ringNodeEls[si];
-    if (!el) continue;
-    const st = tr.steps[si];
-    let fill;
-    if (si >= tr.length)              fill = 'rgba(28,24,16,.03)';
-    else if (st.skip)                 fill = 'rgba(210,32,32,.65)';
-    else if (st.hasChord && st.active) fill = 'rgba(210,130,20,.80)';
-    else if (st.active)               fill = 'rgba(28,24,16,.70)';
-    else                              fill = 'rgba(28,24,16,.14)';
-    el.dot.setAttribute('fill', fill);
-  }
-  // Ring playhead
-  const pos = tr.playheadPos;
-  const a   = (pos / tr.length) * 2 * Math.PI - Math.PI / 2;
-  if (ringPhEl.dot) {
-    ringPhEl.dot.setAttribute('cx', (CX + R_RING * Math.cos(a)).toFixed(2));
-    ringPhEl.dot.setAttribute('cy', (CY + R_RING * Math.sin(a)).toFixed(2));
-  }
+  RING_TARGETS.forEach((tgt, i) => {
+    const els = ringBtnEls[i];
+    if (!els) return;
+    const isActive = tgt === state.mixTarget;
+    els.dot.setAttribute('fill',   isActive ? 'rgba(28,24,16,.62)' : 'rgba(28,24,16,.11)');
+    els.dot.setAttribute('stroke', isActive ? 'rgba(28,24,16,.78)' : 'rgba(28,24,16,.18)');
+    els.lbl.setAttribute('fill',        isActive ? 'rgba(28,24,16,.78)' : 'rgba(28,24,16,.35)');
+    els.lbl.setAttribute('font-weight', isActive ? '700' : '400');
+  });
 }
 
-// ── Update shell spiral for one track ──
-function updateSpiralTrack(ti) {
-  if (!spiralDotEls[ti]) return;
-  const tr = state.tracks[ti];
+// ── Update L3: Pitch node colours ────────────────────────────
+function updatePitchNodes() {
+  const selTrack = state.selectedTrack >= 0 ? state.tracks[state.selectedTrack] : null;
+  const selStep  = selTrack && state.selectedStep >= 0 ? selTrack.steps[state.selectedStep] : null;
 
-  // Highlight the active-length segment of this track's arm
-  const arcEl = document.getElementById(`sp-arc-${ti}`);
-  if (arcEl) {
-    const pts = [];
-    for (let si = 0; si < tr.length; si++) {
-      const p = shellPt(ti * S + si);
-      pts.push(`${p.x.toFixed(1)},${p.y.toFixed(1)}`);
+  PITCH_NODES.forEach((node, n) => {
+    const els = pitchNodeEls[n];
+    if (!els) return;
+    const isAssigned = selStep && selStep.pitOffset === node.midi;
+    const isC        = node.pc === 0;   // C = octave root
+    let fill, stroke, r;
+    if (isAssigned) {
+      fill   = 'rgba(210,130,20,.88)';
+      stroke = 'rgba(210,130,20,.95)';
+      r = Math.max(2.8, R_SPIR * 0.060);
+    } else if (isC) {
+      fill   = 'rgba(28,24,16,.30)';
+      stroke = 'rgba(28,24,16,.52)';
+      r = Math.max(2.6, R_SPIR * 0.050);
+    } else if (node.isSharp) {
+      fill   = 'rgba(28,24,16,.20)';
+      stroke = 'rgba(28,24,16,.34)';
+      r = Math.max(2.0, R_SPIR * 0.038);
+    } else {
+      fill   = 'rgba(28,24,16,.12)';
+      stroke = 'rgba(28,24,16,.24)';
+      r = Math.max(2.4, R_SPIR * 0.048);
     }
-    arcEl.setAttribute('points', pts.join(' '));
-  }
-
-  const baseR = Math.max(1.8, R_SPIR * 0.022);
-  for (let si = 0; si < S; si++) {
-    const dot = spiralDotEls[ti][si];
-    const st  = tr.steps[si];
-    let fill, r;
-    if (si >= tr.length)               { fill = 'rgba(28,24,16,.03)'; r = baseR * 0.65; }
-    else if (st.skip)                  { fill = 'rgba(210,32,32,.72)'; r = baseR * 1.3;  }
-    else if (st.hasChord && st.active) { fill = 'rgba(200,120,20,.88)'; r = baseR * 1.4; }
-    else if (st.active)                { fill = 'rgba(28,24,16,.75)';  r = baseR * 1.4;  }
-    else                               { fill = 'rgba(28,24,16,.12)';  r = baseR;         }
-    dot.setAttribute('fill', fill);
-    dot.setAttribute('r', r.toFixed(1));
-  }
+    els.dot.setAttribute('fill',   fill);
+    els.dot.setAttribute('stroke', stroke);
+    els.dot.setAttribute('r',      r.toFixed(1));
+  });
 }
 
-function _placeAllPlayheads() {
-  for (let ti = 0; ti < T; ti++) {
-    const ph = spiralPhEls[ti];
-    if (!ph) continue;
-    const p = shellPlayheadPt(ti, state.tracks[ti].playheadPos);
-    ph.setAttribute('cx', p.x.toFixed(2));
-    ph.setAttribute('cy', p.y.toFixed(2));
-    ph.setAttribute('fill', 'rgba(210,32,32,.90)');
+// ── Interactions ──────────────────────────────────────────────
+function onArcBtn(id) {
+  const btn = ARC_BTNS.find(b => b.id === id);
+  if (!btn) return;
+  if (btn.group === 'mode') {
+    state.currentMode = id;
+    maxAPI.send('set_mode', id);
+  } else {
+    if (!state.auxActive) state.auxActive = {};
+    state.auxActive[id] = !state.auxActive[id];
   }
+  updateArcNodes();
+}
+
+function onRingTarget(tgt) {
+  state.mixTarget = tgt;
+  selectAttr(tgt.toLowerCase());
   updateRingNodes();
 }
 
-// ── Mode / transport interaction ──
-function setMode(id, ball, led) {
-  state.currentMode = id;
-  document.querySelectorAll('[id^="mb-"]').forEach(g => {
-    const isOn = g.id === `mb-${id}`;
-    const b    = g.querySelector('circle');
-    const l    = g.querySelectorAll('circle')[0]; // ball is first
-    if (b) b.setAttribute('fill', isOn ? 'rgba(28,24,16,.15)' : 'rgba(28,24,16,.07)');
-  });
-  maxAPI.send('set_mode', id);
+function onPitchNode(n) {
+  const node = PITCH_NODES[n];
+  if (!node || state.selectedTrack < 0 || state.selectedStep < 0) return;
+  state.tracks[state.selectedTrack].steps[state.selectedStep].pitOffset = node.midi;
+  maxAPI.send('step_pitch', state.selectedTrack, state.selectedStep, node.midi);
+  updatePitchNodes();
 }
 
-function onTransport(id, ball, txt, led) {
+function onScaleMode(id) {
+  state.scale = id;
+  buildRightPanel();   // rebuild so scale indicator refreshes
+  maxAPI.send('set_scale', id);
+}
+
+function onTransport(id) {
   if (id === 'play') {
     state.playing = !state.playing;
-    ball.setAttribute('fill', state.playing ? 'rgba(28,24,16,.72)' : 'rgba(28,24,16,.08)');
-    txt.setAttribute('fill', state.playing ? '#f0ede5' : 'rgba(28,24,16,.55)');
     maxAPI.send('transport', state.playing ? 1 : 0);
-  } else if (id === 'stop') {
+  } else if (id === 'stop' || id === 'pause') {
     state.playing = false;
     maxAPI.send('transport', 0);
-  } else if (id === 'back' || id === 'cancel') {
-    maxAPI.send('reset_phase');
+  } else if (id === 'rec') {
+    maxAPI.send('rec_toggle');
   }
 }
 
@@ -1247,7 +1222,6 @@ window.updateStep = function(ti, si, active, skip, hasChord) {
   const st = state.tracks[ti].steps[si];
   st.active = !!+active; st.skip = !!+skip; st.hasChord = !!+hasChord;
   renderStep(ti, si);
-  updateSpiralTrack(ti);
   updateArcNodes();
 };
 
@@ -1255,7 +1229,7 @@ window.updatePlayhead = function(ti, pos) {
   ti = +ti; pos = +pos;
   if (ti < 0 || ti >= T) return;
   state.tracks[ti].playheadPos = pos;
-  _placeAllPlayheads();
+  // Left-panel only: flash step cell + pulse track LED
   const si = Math.floor(pos) % S;
   const el = stepEls[ti]?.[si];
   if (el && state.tracks[ti].steps[si]?.active) {
@@ -1263,15 +1237,12 @@ window.updatePlayhead = function(ti, pos) {
     requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('flash')));
   }
   const led = document.getElementById(`tled-${ti}`);
-  if (led) {
-    led.classList.add('lit');
-    clearTimeout(led._t);
-    led._t = setTimeout(() => led.classList.remove('lit'), 70);
-  }
+  if (led) { led.classList.add('lit'); clearTimeout(led._t); led._t = setTimeout(() => led.classList.remove('lit'), 70); }
 };
 
-window.setTempo    = bpm => { state.tempo = Math.round(+bpm || 120); };
-window.setTransport = r  => { state.playing = !!+r; };
+window.setTempo     = bpm => { state.tempo   = Math.round(+bpm || 120); };
+window.setTransport = r   => { state.playing = !!+r; };
+
 window.loadPage = json => {
   try {
     const page = JSON.parse(String(json));
@@ -1279,25 +1250,24 @@ window.loadPage = json => {
     page.tracks.forEach((t, ti) => {
       if (ti >= T) return;
       const tr = state.tracks[ti];
-      if (t.len)        tr.length    = t.len;
-      if (t.dir)        tr.direction = t.dir;
-      if (t.muted != null) tr.muted  = !!t.muted;
+      if (t.len)           tr.length    = t.len;
+      if (t.dir)           tr.direction = t.dir;
+      if (t.muted != null) tr.muted     = !!t.muted;
       if (t.steps) t.steps.forEach((s, si) => {
         if (si >= S) return;
         const st = tr.steps[si];
-        if (s.active != null)    st.active    = !!s.active;
-        if (s.skip   != null)    st.skip      = !!s.skip;
-        if (s.chords != null)    st.hasChord  = (s.chords?.length || 0) > 0;
+        if (s.active != null)  st.active   = !!s.active;
+        if (s.skip   != null)  st.skip     = !!s.skip;
+        if (s.chords != null)  st.hasChord = (s.chords?.length || 0) > 0;
       });
     });
     renderGrid();
-    for (let ti = 0; ti < T; ti++) updateSpiralTrack(ti);
-    updateArcNodes(); updateRingNodes();
+    updateArcNodes(); updateRingNodes(); updatePitchNodes();
   } catch (_) {}
 };
 
 // ════════════════════════════════════════════════════
-// Standalone demo animation
+// Standalone demo animation (no Max connected)
 // ════════════════════════════════════════════════════
 if (typeof window.max === 'undefined') {
   const ticks = new Array(T).fill(0);
@@ -1310,31 +1280,31 @@ if (typeof window.max === 'undefined') {
       accum -= ms;
       if (!state.playing) break;
       for (let ti = 0; ti < T; ti++) {
-        const tr = state.tracks[ti];
         ticks[ti]++;
-        tr.playheadPos = ticks[ti] % tr.length;
+        state.tracks[ti].playheadPos = ticks[ti] % state.tracks[ti].length;
       }
-      _placeAllPlayheads();
-      // Pulse track LEDs on beat
+      // Left-panel playhead indicators only
       for (let ti = 0; ti < T; ti++) {
-        const pos = state.tracks[ti].playheadPos;
-        const si  = Math.floor(pos) % S;
-        if (state.tracks[ti].steps[si]?.active) {
+        const tr  = state.tracks[ti];
+        const si  = Math.floor(tr.playheadPos) % S;
+        if (tr.steps[si]?.active) {
           const el = stepEls[ti]?.[si];
           if (el) { el.classList.remove('flash'); requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('flash'))); }
         }
         const led = document.getElementById(`tled-${ti}`);
         if (led) { led.classList.add('lit'); clearTimeout(led._t); led._t = setTimeout(() => led.classList.remove('lit'), 70); }
-        // Arc node LED pulse
-        const arcEl = arcNodeEls[ti];
-        if (arcEl?.led) {
-          arcEl.led.setAttribute('fill', '#46d020');
-          arcEl.led.setAttribute('filter', 'drop-shadow(0 0 3px #46d020)');
-          clearTimeout(arcEl._lt);
-          arcEl._lt = setTimeout(() => {
-            arcEl.led.setAttribute('fill', 'rgba(28,24,16,.10)');
-            arcEl.led.removeAttribute('filter');
-          }, 80);
+      }
+      // PLAY arc button heartbeat on bar start
+      if (ticks[0] % 4 === 0 && state.playing) {
+        const playEls = arcBtnEls['play'];
+        if (playEls?.led) {
+          playEls.led.setAttribute('fill', '#e8e8dc');
+          playEls.led.setAttribute('filter', 'drop-shadow(0 0 4px #e0e0d0)');
+          clearTimeout(playEls._lt);
+          playEls._lt = setTimeout(() => {
+            playEls.led.setAttribute('fill', '#e0e0d4');
+            playEls.led.setAttribute('filter', 'drop-shadow(0 0 2px #e0e0d4)');
+          }, 120);
         }
       }
     }
@@ -1343,12 +1313,9 @@ if (typeof window.max === 'undefined') {
 }
 
 // ════════════════════════════════════════════════════
-// Resize handling
+// Resize
 // ════════════════════════════════════════════════════
-function onResize() {
-  buildRightPanel();
-}
-const ro = new ResizeObserver(onResize);
+const ro = new ResizeObserver(() => buildRightPanel());
 ro.observe(document.querySelector('.panel-right'));
 
 // ════════════════════════════════════════════════════
@@ -1357,8 +1324,7 @@ ro.observe(document.querySelector('.panel-right'));
 buildMatrix();
 buildBottomStrip();
 renderGrid();
-// Right panel builds after a tick so layout is settled
-requestAnimationFrame(() => { buildRightPanel(); updateArcNodes(); });
+requestAnimationFrame(() => buildRightPanel());
 </script>
 </body>
 </html>
