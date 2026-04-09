@@ -1,11 +1,11 @@
-# genoQs Octopus — Max for Live (WIP)
+# Octopus.amxd
 
-MIDI effect device: dict-backed state, JS engine, JSUI matrix, and a **packaged Live device** (`Octopus.amxd`).
+Max for Live MIDI effect device project for building **`Octopus.amxd`**.
 
 ## Quick start in Ableton
 
 1. Keep **all** `.js` files in the **same folder** as `Octopus.amxd` (Max resolves `octopus_*.js` next to the device).
-2. Drag **`Octopus.amxd`** onto a MIDI track (or use Places → your project folder).
+2. Drag `**Octopus.amxd`** onto a MIDI track (or use Places → your project folder).
 3. If you change `octopus_ui_main.maxpat`, rebuild the device (below) or open the `.amxd` in Max and **Save**.
 
 ## Rebuild `Octopus.amxd` from the template
@@ -31,14 +31,16 @@ Adjust the **CSS variables** in `:root` (faceplate, LED greens/reds, accent oran
 
 ## Source files
 
-| File | Role |
-|------|------|
-| `octopus_data.js` | Dict schema, defaults, small setters |
-| `octopus_engine.js` | Tick engine, scheduling, chains, chords/strum |
-| `octopus_scale.js` | Force-to-scale quantization |
-| `octopus_matrix_ui.js` | JSUI matrix + PAGE/TRACK/STEP/GRID views |
-| `octopus_ui.js` | Bridges `live.tab` → JSUI |
+
+| File                     | Role                                             |
+| ------------------------ | ------------------------------------------------ |
+| `octopus_data.js`        | Dict schema, defaults, small setters             |
+| `octopus_engine.js`      | Tick engine, scheduling, chains, chords/strum    |
+| `octopus_scale.js`       | Force-to-scale quantization                      |
+| `octopus_matrix_ui.js`   | JSUI matrix + PAGE/TRACK/STEP/GRID views         |
+| `octopus_ui.js`          | Bridges `live.tab` → JSUI                        |
 | `octopus_ui_main.maxpat` | Main patcher (also embedded into `Octopus.amxd`) |
+
 
 ## Note
 
