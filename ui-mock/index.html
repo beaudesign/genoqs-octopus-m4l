@@ -538,154 +538,198 @@ function renderGrid() {
 }
 
 // ──────────────────────────────────────────────────────────────
-// Circular sequencer SVG
+// Spiral sequencer SVG  —  golden angle / Fibonacci layout
 // ──────────────────────────────────────────────────────────────
 const NS  = 'http://www.w3.org/2000/svg';
-const CX  = 155, CY = 155;   // centre of SVG (viewBox 310×310)
-const R0  = 140;              // outermost ring
-const R1  = 26;               // innermost ring
-const R_NOTE = 149;           // note label radius
+const CX  = 155, CY = 155;   // centre  (viewBox 310×310)
+const MAX_R   = 136;          // outermost spiral radius
+const NOTE_R  = 148;          // note label orbit radius
 
-const circEls = [];
+// Golden angle: each successive point turns by ~137.508°
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5)); // ≈ 2.39996 rad
 
-function ringR(ti) {
-  return R0 - ti * (R0 - R1) / (T - 1);
+// Total nodes in the spiral = T tracks × S steps = 160
+// Index layout: node index n = ti * S + si
+// (tracks 0–9 fill inner→outer in groups of 16)
+const N_NODES = T * S; // 160
+
+// Pre-compute every spiral node position once
+const spiralPts = [];   // [{x,y}]  length 160
+function _buildSpiralPts() {
+  for (let n = 0; n < N_NODES; n++) {
+    const r = MAX_R * Math.sqrt((n + 0.5) / N_NODES);
+    const a = n * GOLDEN_ANGLE;
+    spiralPts.push({
+      x: CX + r * Math.cos(a),
+      y: CY + r * Math.sin(a),
+    });
+  }
 }
-function angle(frac) {
-  return frac * 2 * Math.PI - Math.PI / 2;
+_buildSpiralPts();
+
+// playhead position along the spiral for each track:
+// interpolates between the si-th and (si+1)-th node of that track
+function _spiralPlayheadPt(ti, pos) {
+  const si0  = Math.floor(pos) % S;
+  const si1  = (si0 + 1) % S;
+  const frac = pos - Math.floor(pos);
+  const n0   = ti * S + si0;
+  const n1   = ti * S + si1;
+  const p0   = spiralPts[n0], p1 = spiralPts[n1];
+  return {
+    x: p0.x + (p1.x - p0.x) * frac,
+    y: p0.y + (p1.y - p0.y) * frac,
+  };
 }
+
 function mkEl(tag, attrs) {
   const el = document.createElementNS(NS, tag);
   for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
   return el;
 }
-function pt(r, frac) {
-  const a = angle(frac);
-  return { x: CX + Math.cos(a) * r, y: CY + Math.sin(a) * r };
-}
+
+// Per-step SVG elements
+const spiralDotEls  = [];   // [ti][si] → <circle>
+const spiralPhEls   = [];   // [ti]     → <circle>  (playhead)
+const spiralNumEls  = [];   // [ti]     → <text>    (track label)
 
 function buildCirc() {
   const svg = document.getElementById('circ-svg');
   svg.innerHTML = '';
 
-  // ── Note labels (12, chromatic, outermost) ──
+  // ── Faint guide arcs: one thin arc per track showing its length ──
+  // (drawn first so they sit below everything)
+  for (let ti = 0; ti < T; ti++) {
+    const el = mkEl('polyline', {
+      fill: 'none',
+      stroke: 'rgba(28,26,20,0.06)',
+      'stroke-width': '0.8',
+      'stroke-linejoin': 'round',
+    });
+    el.id = `spiral-arc-${ti}`;
+    svg.appendChild(el);
+  }
+
+  // ── All step-slot dots (small, drawn before playheads) ──
+  for (let ti = 0; ti < T; ti++) {
+    spiralDotEls[ti] = [];
+    for (let si = 0; si < S; si++) {
+      const p   = spiralPts[ti * S + si];
+      const dot = mkEl('circle', {
+        cx: p.x.toFixed(2), cy: p.y.toFixed(2),
+        r: '3.2',
+        fill: 'rgba(28,26,20,0.08)',
+      });
+      svg.appendChild(dot);
+      spiralDotEls[ti][si] = dot;
+    }
+  }
+
+  // ── Track number labels — sit just outside first node of each track ──
+  for (let ti = 0; ti < T; ti++) {
+    const p0  = spiralPts[ti * S];           // first step of this track
+    const mid = spiralPts[ti * S + 7];       // mid-point for anchor dir
+    // offset label away from the spiral centre
+    const dx  = p0.x - CX, dy = p0.y - CY;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    const lbl = mkEl('text', {
+      x: (p0.x + (dx / len) * 7).toFixed(1),
+      y: (p0.y + (dy / len) * 7).toFixed(1),
+      'text-anchor': 'middle', 'dominant-baseline': 'central',
+      'font-size': '5.5',
+      'font-family': '-apple-system,Helvetica Neue,sans-serif',
+      fill: 'rgba(28,26,20,0.32)',
+    });
+    lbl.textContent = ti;
+    svg.appendChild(lbl);
+    spiralNumEls[ti] = lbl;
+  }
+
+  // ── Playhead dots (on top) ──
+  for (let ti = 0; ti < T; ti++) {
+    const ph = mkEl('circle', {
+      r: '4.2',
+      fill: 'rgba(216,40,40,0.0)',   // invisible until first update
+      'stroke-width': '0',
+    });
+    svg.appendChild(ph);
+    spiralPhEls[ti] = ph;
+  }
+
+  // ── Chromatic note ring — labels around the outer perimeter ──
   for (let ni = 0; ni < 12; ni++) {
-    const p = pt(R_NOTE, ni / 12);
+    const a = (ni / 12) * 2 * Math.PI - Math.PI / 2;
     const t = mkEl('text', {
-      x: p.x.toFixed(1), y: p.y.toFixed(1),
-      'text-anchor': 'middle',
-      'dominant-baseline': 'central',
+      x: (CX + NOTE_R * Math.cos(a)).toFixed(1),
+      y: (CY + NOTE_R * Math.sin(a)).toFixed(1),
+      'text-anchor': 'middle', 'dominant-baseline': 'central',
       'font-size': '6.5',
       'font-family': '-apple-system,Helvetica Neue,sans-serif',
       fill: NOTE_NAMES[ni].includes('#')
-        ? 'rgba(28,26,20,0.55)'
-        : 'rgba(28,26,20,0.42)',
+        ? 'rgba(28,26,20,0.50)' : 'rgba(28,26,20,0.36)',
       'font-weight': NOTE_NAMES[ni].includes('#') ? '600' : '400',
     });
     t.textContent = NOTE_NAMES[ni];
     svg.appendChild(t);
   }
 
-  // ── Track rings (outer→inner, so inner draws on top) ──
-  for (let ti = T - 1; ti >= 0; ti--) {
-    const r = ringR(ti);
-
-    // Subtle background ring
-    svg.appendChild(mkEl('circle', {
-      cx: CX, cy: CY, r,
-      fill: 'none',
-      stroke: 'rgba(28,26,20,0.06)',
-      'stroke-width': '1',
-    }));
-
-    // Step-slot dots
-    const dots = [];
-    for (let si = 0; si < S; si++) {
-      const p = pt(r, si / S);
-      const dot = mkEl('circle', {
-        cx: p.x.toFixed(2), cy: p.y.toFixed(2),
-        r: '2', fill: 'rgba(28,26,20,0.07)',
-      });
-      svg.appendChild(dot);
-      dots.push(dot);
-    }
-
-    // Active-length arc (dash trick, starts at top)
-    const arc = mkEl('circle', {
-      cx: CX, cy: CY, r,
-      fill: 'none',
-      stroke: 'rgba(28,26,20,0.30)',
-      'stroke-width': '2.2',
-      'stroke-linecap': 'round',
-      transform: `rotate(-90,${CX},${CY})`,
-    });
-    svg.appendChild(arc);
-
-    // Track-number label near top of ring
-    const numAngle = -Math.PI / 2 - 0.18;
-    const np = {
-      x: CX + Math.cos(numAngle) * r,
-      y: CY + Math.sin(numAngle) * r,
-    };
-    const numLabel = mkEl('text', {
-      x: np.x.toFixed(1), y: np.y.toFixed(1),
-      'text-anchor': 'middle', 'dominant-baseline': 'central',
-      'font-size': '5',
-      'font-family': '-apple-system,Helvetica Neue,sans-serif',
-      fill: 'rgba(28,26,20,0.35)',
-    });
-    numLabel.textContent = ti;
-    svg.appendChild(numLabel);
-
-    // Playhead dot
-    const ph = mkEl('circle', { r: '3.8', fill: 'rgba(216,40,40,0.88)' });
-    svg.appendChild(ph);
-
-    circEls[ti] = { arc, dots, playhead: ph };
-    updateCircRing(ti);
-  }
-
-  // Centre point
+  // ── Centre dot ──
   svg.appendChild(mkEl('circle', {
-    cx: CX, cy: CY, r: '3',
-    fill: 'rgba(28,26,20,0.18)',
+    cx: CX, cy: CY, r: '2.5',
+    fill: 'rgba(28,26,20,0.16)',
   }));
+
+  // Populate initial state
+  for (let ti = 0; ti < T; ti++) updateCircRing(ti);
 }
 
 function updateCircRing(ti) {
-  const el = circEls[ti];
-  if (!el) return;
+  if (!spiralDotEls[ti]) return;
   const tr = state.tracks[ti];
-  const r  = ringR(ti);
-  const c  = 2 * Math.PI * r;
 
-  // Dash = active length proportion
-  const dash = (tr.length / S) * c;
-  el.arc.setAttribute('stroke-dasharray', `${dash.toFixed(2)} ${(c - dash + 0.01).toFixed(2)}`);
+  // Guide arc through this track's active steps
+  const arcEl = document.getElementById(`spiral-arc-${ti}`);
+  if (arcEl) {
+    const pts = [];
+    for (let si = 0; si < tr.length; si++) {
+      const p = spiralPts[ti * S + si];
+      pts.push(`${p.x.toFixed(1)},${p.y.toFixed(1)}`);
+    }
+    arcEl.setAttribute('points', pts.join(' '));
+  }
 
-  // Step-slot dots
+  // Step dots
   for (let si = 0; si < S; si++) {
-    const st = tr.steps[si];
-    let fill;
-    if (si >= tr.length)            fill = 'rgba(28,26,20,0.03)';
-    else if (st.skip)               fill = 'rgba(216,40,40,0.60)';
-    else if (st.hasChord && st.active) fill = 'rgba(216,144,40,0.75)';
-    else if (st.active)             fill = 'rgba(28,26,20,0.68)';
-    else                            fill = 'rgba(28,26,20,0.10)';
-    el.dots[si].setAttribute('fill', fill);
+    const dot = spiralDotEls[ti][si];
+    const st  = tr.steps[si];
+    let fill, r;
+    if (si >= tr.length) {
+      fill = 'rgba(28,26,20,0.03)'; r = '2.2';
+    } else if (st.skip) {
+      fill = 'rgba(216,40,40,0.72)'; r = '3.5';
+    } else if (st.hasChord && st.active) {
+      fill = 'rgba(200,120,28,0.85)'; r = '3.8';
+    } else if (st.active) {
+      fill = 'rgba(28,26,20,0.75)'; r = '3.8';
+    } else {
+      fill = 'rgba(28,26,20,0.10)'; r = '3.0';
+    }
+    dot.setAttribute('fill', fill);
+    dot.setAttribute('r', r);
   }
 
   _placePlayhead(ti);
 }
 
 function _placePlayhead(ti) {
-  const el = circEls[ti];
-  if (!el) return;
+  const ph = spiralPhEls[ti];
+  if (!ph) return;
   const tr = state.tracks[ti];
-  const r  = ringR(ti);
-  const p  = pt(r, tr.playheadPos / tr.length);
-  el.playhead.setAttribute('cx', p.x.toFixed(2));
-  el.playhead.setAttribute('cy', p.y.toFixed(2));
+  const p  = _spiralPlayheadPt(ti, tr.playheadPos);
+  ph.setAttribute('cx', p.x.toFixed(2));
+  ph.setAttribute('cy', p.y.toFixed(2));
+  ph.setAttribute('fill', 'rgba(216,40,40,0.90)');
+  ph.setAttribute('r', '4.2');
 }
 
 // ──────────────────────────────────────────────────────────────
