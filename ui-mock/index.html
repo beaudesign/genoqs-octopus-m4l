@@ -1,533 +1,743 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Octopus</title>
-  <style>
-    :root {
-      --bg:         #f4f3ef;
-      --surface:    #fafaf8;
-      --border:     rgba(26,26,26,0.08);
-      --text:       #1a1a1a;
-      --muted:      rgba(26,26,26,0.38);
-      --accent:     #2d62c8;
-      --step-ring:  rgba(26,26,26,0.14);
-      --step-on:    #1a1a1a;
-      --step-skip:  #c0392b;
-      --step-chord: #b8620a;
-      --playhead:   #c0392b;
-      --font:       -apple-system, "Helvetica Neue", system-ui, sans-serif;
-    }
-    *, *::before, *::after { box-sizing: border-box; }
-    html, body {
-      margin: 0; padding: 0;
-      width: 100%; height: 100%;
-      overflow: hidden;
-      background: var(--bg);
-      color: var(--text);
-      font-family: var(--font);
-      font-size: 11px;
-      -webkit-font-smoothing: antialiased;
-      user-select: none;
-    }
+<meta charset="UTF-8"/>
+<title>Octopus</title>
+<style>
+/* ─────────────────────────────────────────────────────
+   TOKENS
+───────────────────────────────────────────────────── */
+:root {
+  --bg:         #f0ede5;
+  --bg2:        #e8e4db;
+  --div:        rgba(28,24,16,.08);
+  --text:       #1c1810;
+  --muted:      rgba(28,24,16,.40);
+  --faint:      rgba(28,24,16,.15);
+  --green:      #46d020;
+  --red:        #d42020;
+  --amber:      #d88820;
+  --pink:       #e048a0;
+  --white-led:  #e8e8dc;
+  --yellow-led: #d8c820;
+  --accent:     #2650c0;
+  --font: -apple-system,"Helvetica Neue",system-ui,sans-serif;
 
-    /* ── Layout ─────────────────────────────────── */
-    .app { display: flex; flex-direction: column; height: 100%; }
+  /* ball gradients */
+  --ball-lg: radial-gradient(circle at 33% 28%, #dedad0 0%, #aaa49a 38%, #807870 68%, #605850 100%);
+  --ball-md: radial-gradient(circle at 33% 28%, #d0ccc4 0%, #9e9890 40%, #787068 70%, #585048 100%);
+  --ball-sm: radial-gradient(circle at 35% 30%, #c8c4bc 0%, #989088 45%, #706860 75%, #504840 100%);
+  --ball-on: radial-gradient(circle at 35% 30%, #484038 0%, #201c18 100%);
+  --ball-shadow: 0 1.5px 4px rgba(0,0,0,.32), inset 0 1px 2px rgba(255,255,255,.38);
+  --ball-shadow-lg: 0 2px 7px rgba(0,0,0,.36), inset 0 1.5px 3px rgba(255,255,255,.42);
+}
 
-    /* ── Header ──────────────────────────────────── */
-    .header {
-      flex-shrink: 0;
-      height: 44px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 0 16px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-    }
-    .transport { display: flex; gap: 4px; }
-    .btn {
-      width: 26px; height: 26px;
-      border: 1px solid var(--border);
-      border-radius: 5px;
-      background: transparent;
-      color: var(--text);
-      cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      padding: 0;
-      transition: background 0.1s;
-    }
-    .btn:hover { background: var(--bg); }
-    .btn.on { background: var(--text); color: var(--surface); border-color: var(--text); }
-    .tempo {
-      display: flex; align-items: baseline; gap: 3px;
-    }
-    .tempo-label { color: var(--muted); font-size: 9px; letter-spacing: 0.1em; }
-    .tempo-value { font-size: 13px; font-weight: 500; min-width: 36px; }
-    .spacer { flex: 1; }
-    .device-name {
-      font-size: 9px; letter-spacing: 0.22em; text-transform: lowercase; color: var(--muted);
-    }
-    .page-dots { display: flex; gap: 5px; align-items: center; }
-    .page-dot {
-      width: 7px; height: 7px; border-radius: 50%;
-      border: 1.5px solid var(--muted);
-      cursor: pointer;
-      transition: background 0.1s, border-color 0.1s;
-    }
-    .page-dot.active { background: var(--text); border-color: var(--text); }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    /* ── Workspace ───────────────────────────────── */
-    .workspace { flex: 1; min-height: 0; display: flex; }
+html, body {
+  width: 100%; height: 100%; overflow: hidden;
+  background: var(--bg);
+  font-family: var(--font);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
 
-    /* ── Step Grid ───────────────────────────────── */
-    .grid-panel {
-      flex: 1; min-width: 0;
-      display: flex; flex-direction: column;
-      padding: 10px 8px 10px 14px;
-    }
-    .grid-header-row {
-      display: flex; align-items: center;
-      padding-left: 26px;
-      margin-bottom: 4px;
-      flex-shrink: 0;
-    }
-    .beat-group {
-      flex: 4; display: flex; gap: 3px;
-    }
-    .beat-num {
-      flex: 1; text-align: center; font-size: 8px; color: var(--muted);
-    }
-    .beat-gap { flex-shrink: 0; width: 6px; }
+/* ─────────────────────────────────────────────────────
+   SHELL
+───────────────────────────────────────────────────── */
+.device {
+  display: flex; flex-direction: column;
+  width: 100%; height: 100%;
+}
 
-    .grid-body {
-      flex: 1; min-height: 0;
-      display: flex; flex-direction: column; gap: 3px;
-    }
-    .track-row {
-      display: flex; align-items: center; gap: 4px;
-      flex: 1; min-height: 0;
-    }
-    .track-num {
-      flex-shrink: 0; width: 14px; text-align: right;
-      font-size: 8px; color: var(--muted);
-    }
-    .track-indicator {
-      flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%;
-      background: transparent; transition: background 0.08s;
-    }
-    .track-indicator.live { background: var(--playhead); }
-    .track-steps {
-      flex: 1; display: flex; gap: 6px; min-width: 0;
-    }
-    .step-group { flex: 4; display: flex; gap: 3px; }
-    .step-cell {
-      flex: 1; border-radius: 50%;
-      border: 1.5px solid var(--step-ring);
-      background: transparent;
-      cursor: pointer;
-      aspect-ratio: 1;
-      min-width: 0; min-height: 0;
-      transition: background 60ms, border-color 60ms, opacity 60ms;
-    }
-    .step-cell.on    { background: var(--step-on);    border-color: var(--step-on); }
-    .step-cell.skip  { background: var(--step-skip);  border-color: var(--step-skip); }
-    .step-cell.chord { background: var(--step-chord); border-color: var(--step-chord); }
-    .step-cell.selected {
-      outline: 2px solid var(--accent); outline-offset: 1px;
-    }
-    .step-cell.inactive { opacity: 0.12; }
-    .step-cell.muted    { opacity: 0.22; }
+/* ─────────────────────────────────────────────────────
+   TOP BAR
+───────────────────────────────────────────────────── */
+.top-bar {
+  flex-shrink: 0;
+  height: 26px;
+  display: flex; align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--div);
+}
+.brand {
+  font-size: 9px; letter-spacing: .14em;
+  text-transform: none; color: var(--muted);
+}
+.model {
+  font-size: 16px; font-style: italic;
+  letter-spacing: .22em; color: var(--text);
+  font-weight: 300;
+}
 
-    @keyframes ph-flash {
-      0%   { box-shadow: 0 0 0 0   rgba(192,57,43,0.65); }
-      100% { box-shadow: 0 0 0 5px rgba(192,57,43,0);    }
-    }
-    .step-cell.flash { animation: ph-flash 0.2s ease-out forwards; }
+/* ─────────────────────────────────────────────────────
+   WORKSPACE  (left panel + right panel)
+───────────────────────────────────────────────────── */
+.workspace {
+  flex: 1; min-height: 0;
+  display: flex;
+}
 
-    /* ── Circular Sequencer ──────────────────────── */
-    .circ-panel {
-      flex-shrink: 0; width: 256px;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center; gap: 6px;
-      border-left: 1px solid var(--border); padding: 10px;
-    }
-    .circ-label {
-      font-size: 8px; letter-spacing: 0.15em;
-      color: var(--muted); text-transform: lowercase;
-    }
-    #circ-svg { width: 100%; max-width: 220px; max-height: 220px; }
+/* ═══════════════════════════════════════════════════
+   LEFT PANEL
+═══════════════════════════════════════════════════ */
+.panel-left {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column;
+  border-right: 1px solid var(--div);
+}
 
-    /* ── Context Panel ───────────────────────────── */
-    .context-panel {
-      flex-shrink: 0; height: 108px;
-      border-top: 1px solid var(--border);
-      background: var(--surface);
-      display: flex;
-    }
-    .ctx-col {
-      flex: 1; min-width: 0;
-      padding: 9px 14px;
-      border-right: 1px solid var(--border);
-      display: flex; flex-direction: column; gap: 6px;
-    }
-    .ctx-col:last-child { border-right: none; }
-    .ctx-col-title {
-      font-size: 8px; letter-spacing: 0.15em;
-      color: var(--muted); text-transform: lowercase; flex-shrink: 0;
-    }
-    .ctx-attrs { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
-    .attr-item { display: flex; flex-direction: column; gap: 2px; }
-    .attr-label { font-size: 7px; letter-spacing: 0.12em; color: var(--muted); text-transform: lowercase; }
-    .attr-value { font-size: 12px; font-weight: 500; }
+/* ── Matrix region (fills height, flex row) ── */
+.matrix-region {
+  flex: 1; min-height: 0;
+  display: flex; align-items: stretch;
+  padding: 8px 0 6px 0;
+  gap: 0;
+}
 
-    .mut-row { display: flex; gap: 4px; flex-wrap: wrap; }
-    .mut-btn {
-      padding: 3px 8px;
-      border: 1px solid var(--border); border-radius: 4px;
-      background: transparent; cursor: pointer;
-      font-size: 8px; letter-spacing: 0.08em; color: var(--muted);
-    }
-    .mut-btn:hover { color: var(--text); border-color: rgba(26,26,26,0.22); }
-  </style>
+/* ── Clef column ── */
+.clef-col {
+  flex-shrink: 0; width: 18px;
+  display: flex; flex-direction: column;
+  justify-content: space-around; align-items: center;
+  padding: 8px 0;
+}
+.clef-sym {
+  font-size: 28px; line-height: 1;
+  color: var(--faint);
+  transform: scaleY(.85);
+}
+
+/* ── Side ball columns (MIX / SEL / MUT / EDIT) ── */
+.ball-col {
+  flex-shrink: 0;
+  display: flex; flex-direction: column;
+  justify-content: space-around; align-items: center;
+  position: relative;
+}
+.ball-col-label {
+  position: absolute; bottom: -14px; left: 50%;
+  transform: translateX(-50%);
+  font-size: 6px; letter-spacing: .13em;
+  text-transform: uppercase; color: var(--muted);
+  white-space: nowrap;
+}
+.ball-col.mix  { width: 28px; padding: 0 2px; }
+.ball-col.sel  { width: 20px; }
+.ball-col.mut  { width: 20px; }
+.ball-col.edit { width: 28px; padding: 0 2px; }
+
+/* ── Individual ball sizes ── */
+.ball {
+  border-radius: 50%;
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+}
+.ball::before {          /* shine */
+  content: '';
+  position: absolute; top: 17%; left: 22%;
+  width: 28%; height: 28%; border-radius: 50%;
+  background: rgba(255,255,255,.55);
+  pointer-events: none;
+}
+.ball.sz-lg {
+  width: 22px; height: 22px;
+  background: var(--ball-lg);
+  box-shadow: var(--ball-shadow-lg);
+}
+.ball.sz-md {
+  width: 16px; height: 16px;
+  background: var(--ball-md);
+  box-shadow: var(--ball-shadow);
+}
+.ball.sz-sm {
+  width: 11px; height: 11px;
+  background: var(--ball-sm);
+  box-shadow: var(--ball-shadow);
+}
+
+/* LED dot under each side ball */
+.ball-led {
+  width: 4px; height: 4px; border-radius: 50%;
+  background: rgba(28,24,16,.10);
+  flex-shrink: 0;
+  transition: background .06s;
+}
+.ball-led.green  { background: var(--green);  box-shadow: 0 0 3px var(--green); }
+.ball-led.red    { background: var(--red);    box-shadow: 0 0 3px var(--red);   }
+.ball-led.amber  { background: var(--amber);  box-shadow: 0 0 2px var(--amber); }
+.ball-led.yellow { background: var(--yellow-led); }
+.ball-led.pink   { background: var(--pink);   box-shadow: 0 0 2px var(--pink);  }
+
+/* ── Attr + Matrix core ── */
+.matrix-core {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column;
+}
+
+/* Attr strip left of grid */
+.attr-row-labels {
+  flex: 1; min-height: 0;
+  display: flex; align-items: stretch;
+}
+.attr-lhs {
+  flex-shrink: 0; width: 26px;
+  display: flex; flex-direction: column;
+  justify-content: space-around; align-items: flex-end;
+  padding-right: 3px;
+}
+.attr-lbl {
+  font-size: 6.5px; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--muted);
+  cursor: pointer; line-height: 1;
+  transition: color .1s;
+}
+.attr-lbl.active { color: var(--text); font-weight: 600; }
+.attr-lbl:hover  { color: var(--text); }
+
+/* ── Step grid ── */
+.step-grid {
+  flex: 1; min-width: 0; min-height: 0;
+  display: grid;
+  /* 4 groups of 4 steps, with a 5px gap between groups */
+  grid-template-columns: repeat(4, repeat(4, 1fr) 5px);
+  grid-template-rows: repeat(10, 1fr);
+  gap: 3px;
+}
+
+/* Override the beat-gap cols to be narrow */
+.step-grid .beat-gap {
+  width: 4px;
+}
+
+.step-cell {
+  width: 100%; aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--ball-sm);
+  box-shadow: var(--ball-shadow);
+  cursor: pointer;
+  align-self: center; justify-self: center;
+  position: relative;
+  transition: background 55ms, box-shadow 55ms, opacity 55ms;
+}
+/* Ball shine */
+.step-cell::before {
+  content: '';
+  position: absolute; top: 17%; left: 22%;
+  width: 28%; height: 28%; border-radius: 50%;
+  background: rgba(255,255,255,.50);
+  pointer-events: none;
+}
+/* LED dot below */
+.step-cell::after {
+  content: '';
+  position: absolute; bottom: -5px; left: 50%;
+  transform: translateX(-50%);
+  width: 3px; height: 3px; border-radius: 50%;
+  background: rgba(28,24,16,.10);
+  pointer-events: none;
+}
+.step-cell.on {
+  background: var(--ball-on);
+  box-shadow: 0 1px 3px rgba(0,0,0,.4), inset 0 1px 1px rgba(255,255,255,.08);
+}
+.step-cell.on::after   { background: var(--green); box-shadow: 0 0 2px var(--green); }
+.step-cell.skip        { background: radial-gradient(circle at 35% 30%, #e04040 0%, #901818 100%); }
+.step-cell.skip::after { background: var(--red); }
+.step-cell.chord { background: radial-gradient(circle at 35% 30%, #e09040 0%, #905010 100%); }
+.step-cell.inactive    { opacity: .10; pointer-events: none; }
+.step-cell.muted.on    { opacity: .22; }
+.step-cell.sel         { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+@keyframes ph-flash {
+  0%   { box-shadow: 0 0 0 0   rgba(70,208,32,.80); }
+  100% { box-shadow: 0 0 0 8px rgba(70,208,32,0);   }
+}
+.step-cell.flash { animation: ph-flash .18s ease-out forwards; }
+
+/* ── Track LED + number (left of step row, absolute overlay) ── */
+.track-led {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: rgba(28,24,16,.10);
+  transition: background .06s;
+}
+.track-led.lit { background: var(--green); box-shadow: 0 0 3px var(--green); }
+
+/* ── Bottom function strip ── */
+.bottom-strip {
+  flex-shrink: 0;
+  height: 28px;
+  display: flex; align-items: center;
+  gap: 0;
+  border-top: 1px solid var(--div);
+  padding: 0 4px;
+  overflow: hidden;
+}
+.bs-section {
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 10px;
+  border-right: 1px solid var(--div);
+  height: 100%;
+}
+.bs-section:last-child { border-right: none; }
+.bs-label {
+  font-size: 6px; letter-spacing: .15em;
+  text-transform: uppercase; color: var(--muted);
+  white-space: nowrap;
+}
+.bs-attrs {
+  display: flex; gap: 8px; align-items: center;
+}
+.bs-attr {
+  display: flex; flex-direction: column;
+  align-items: center; gap: 2px;
+  cursor: pointer;
+}
+.bs-attr-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: rgba(28,24,16,.12);
+  transition: background .08s;
+}
+.bs-attr-dot.on { background: var(--amber); box-shadow: 0 0 3px var(--amber); }
+.bs-attr-name {
+  font-size: 5.5px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted);
+}
+.bs-attr.active .bs-attr-name { color: var(--text); }
+
+/* page dots */
+.page-dots { display: flex; gap: 5px; align-items: center; }
+.page-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  border: 1.5px solid var(--muted); cursor: pointer;
+  transition: background .1s;
+}
+.page-dot.active { background: var(--text); border-color: var(--text); }
+
+/* ═══════════════════════════════════════════════════
+   RIGHT PANEL
+═══════════════════════════════════════════════════ */
+.panel-right {
+  flex: 1; min-width: 0; min-height: 0;
+  display: flex; flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+/* SVG fills panel */
+#right-svg {
+  width: 100%; height: 100%;
+  display: block;
+  overflow: visible;
+}
+
+/* SVG control groups — use pointer-events for interactivity */
+.ctrl-group { cursor: pointer; }
+
+/* ── Mode LED + label style (in SVG via foreignObject isn't needed;
+      we do everything in SVG) ── */
+</style>
 </head>
 <body>
-<div class="app">
+<div class="device">
 
-  <!-- HEADER ──────────────────────────────────── -->
-  <header class="header">
-    <div class="transport">
-      <button class="btn" id="btn-stop" title="Stop">
-        <svg width="8" height="8" viewBox="0 0 8 8">
-          <rect x="0.5" y="0.5" width="7" height="7" fill="currentColor" rx="0.5"/>
-        </svg>
-      </button>
-      <button class="btn on" id="btn-play" title="Play">
-        <svg width="8" height="10" viewBox="0 0 8 10">
-          <polygon points="0.5,0.5 7.5,5 0.5,9.5" fill="currentColor"/>
-        </svg>
-      </button>
-      <button class="btn" id="btn-reset" title="Reset phase">
-        <svg width="12" height="10" viewBox="0 0 12 10">
-          <path d="M11 5A5 5 0 1 1 6 0.5" stroke="currentColor" stroke-width="1.4"
-                fill="none" stroke-linecap="round"/>
-          <polygon points="6,0.5 10,0 10,3" fill="currentColor"/>
-        </svg>
-      </button>
-    </div>
+  <!-- ══ TOP BAR ══ -->
+  <div class="top-bar">
+    <span class="brand">genoQs Machines</span>
+    <span class="model">octopus</span>
+  </div>
 
-    <div class="tempo">
-      <span class="tempo-label">bpm</span>
-      <span class="tempo-value" id="tempo-val">120</span>
-    </div>
-
-    <div class="spacer"></div>
-    <span class="device-name">octopus</span>
-    <div class="spacer"></div>
-
-    <div class="page-dots" id="page-dots"></div>
-  </header>
-
-  <!-- WORKSPACE ───────────────────────────────── -->
+  <!-- ══ WORKSPACE ══ -->
   <div class="workspace">
 
-    <!-- Step grid -->
-    <div class="grid-panel">
-      <div class="grid-header-row" id="grid-hdr"></div>
-      <div class="grid-body"       id="grid-body"></div>
+    <!-- ════ LEFT PANEL ════ -->
+    <div class="panel-left">
+      <div class="matrix-region">
+
+        <!-- Clef icons -->
+        <div class="clef-col">
+          <div class="clef-sym">𝄞</div>
+          <div class="clef-sym" style="font-size:22px;margin-top:4px">𝄢</div>
+        </div>
+
+        <!-- MIX column (large balls) -->
+        <div class="ball-col mix" id="col-mix">
+          <span class="ball-col-label">MIX</span>
+        </div>
+
+        <!-- SEL column (medium balls) -->
+        <div class="ball-col sel" id="col-sel">
+          <span class="ball-col-label">SEL</span>
+        </div>
+
+        <!-- Attr labels + step grid -->
+        <div class="matrix-core">
+          <div class="attr-row-labels">
+            <!-- Attr labels (left) -->
+            <div class="attr-lhs" id="attr-lhs"></div>
+            <!-- Step grid with per-row track num/LED -->
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;" id="grid-rows"></div>
+          </div>
+        </div>
+
+        <!-- MUT column -->
+        <div class="ball-col mut" id="col-mut">
+          <span class="ball-col-label">MUT</span>
+        </div>
+
+        <!-- EDIT / CLR column -->
+        <div class="ball-col edit" id="col-edit">
+          <span class="ball-col-label">EDIT</span>
+        </div>
+
+      </div><!-- .matrix-region -->
+
+      <!-- ── Bottom strip ── -->
+      <div class="bottom-strip" id="bottom-strip"></div>
+
+    </div><!-- .panel-left -->
+
+    <!-- ════ RIGHT PANEL ════ -->
+    <div class="panel-right">
+      <svg id="right-svg" xmlns="http://www.w3.org/2000/svg"></svg>
     </div>
 
-    <!-- Circular sequencer -->
-    <div class="circ-panel">
-      <span class="circ-label">time · phase</span>
-      <svg id="circ-svg" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg"></svg>
-    </div>
-
-  </div>
-
-  <!-- CONTEXT PANEL ───────────────────────────── -->
-  <div class="context-panel">
-    <div class="ctx-col">
-      <div class="ctx-col-title">step</div>
-      <div class="ctx-attrs" id="ctx-step">
-        <span style="font-size:9px;color:var(--muted)">select a step</span>
-      </div>
-    </div>
-    <div class="ctx-col">
-      <div class="ctx-col-title">track</div>
-      <div class="ctx-attrs" id="ctx-track">
-        <span style="font-size:9px;color:var(--muted)">–</span>
-      </div>
-    </div>
-    <div class="ctx-col" style="flex:0.65;flex-shrink:0">
-      <div class="ctx-col-title">mutators</div>
-      <div class="mut-row">
-        <button class="mut-btn" data-msg="randomize">rnd</button>
-        <button class="mut-btn" data-msg="clear">clr</button>
-        <button class="mut-btn" data-msg="reverse">rev</button>
-        <button class="mut-btn" data-msg="rotate">rot</button>
-        <button class="mut-btn" data-msg="copy">copy</button>
-      </div>
-    </div>
-  </div>
-
-</div><!-- .app -->
+  </div><!-- .workspace -->
+</div><!-- .device -->
 
 <script>
-// ══════════════════════════════════════════════════════════════
-// Max bridge — safe in both standalone and jweb contexts
-// ══════════════════════════════════════════════════════════════
+'use strict';
+// ════════════════════════════════════════════════════
+// Max bridge
+// ════════════════════════════════════════════════════
 const maxAPI = (() => {
-  if (typeof window.max !== 'undefined') {
-    return { send: (...a) => window.max.outlet(...a) };
-  }
+  if (typeof window.max !== 'undefined') return { send: (...a) => window.max.outlet(...a) };
   return { send: (...a) => console.log('[→ Max]', ...a) };
 })();
 
-// ══════════════════════════════════════════════════════════════
-// Constants
-// ══════════════════════════════════════════════════════════════
-const T = 10;   // tracks
-const S = 16;   // steps
+// ════════════════════════════════════════════════════
+// ── SPEC v0.1 ──
+// Right panel = 4 overlapping control layers:
+//   L1 Outer Arc     → segmented mode/scale/tempo buttons
+//   L2 Parameter Ring → radial mix_target selector
+//   L3 Shell Spiral   → pitch/harmonic topology (click = assign pitch)
+//   L4 Center Cluster → transport, scale, mode, main encoder
+// Playhead lives in left panel only (step flash + track LED).
+// ════════════════════════════════════════════════════
 
-// ══════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════
+// Constants
+// ════════════════════════════════════════════════════
+const T = 10, S = 16;
+
+// Mix-target attributes (encoder context, spec §2.5)
+const MIX_TARGETS = ['VEL','PIT','LEN','STA','POS','GRV','MCC'];
+// Full attr label list for left-side row labels
+const ATTR_LABELS = ['VEL','PIT','LEN','STA','POS','DIR','AMT','GRV','MCC','MCH'];
+const NOTE_NAMES  = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+// ── Layer 1: Outer Arc buttons ───────────────────────
+// Two groups: MODE (left side of arc) + AUX (right side)
+const ARC_BTNS = [
+  // Mode group
+  { id:'grid',   lbl:'GRID',  group:'mode', led:'off'   },
+  { id:'page',   lbl:'PAGE',  group:'mode', led:'green' },
+  { id:'track',  lbl:'TRACK', group:'mode', led:'off'   },
+  { id:'step',   lbl:'STEP',  group:'mode', led:'off'   },
+  { id:'map',    lbl:'MAP',   group:'mode', led:'off'   },
+  { id:'play',   lbl:'PLAY',  group:'mode', led:'white' },
+  // Aux group (scale / timing)
+  { id:'scale',  lbl:'SCALE', group:'aux',  led:'off'   },
+  { id:'tempo',  lbl:'TEMPO', group:'aux',  led:'off'   },
+  { id:'chord',  lbl:'CHORD', group:'aux',  led:'off'   },
+  { id:'aln',    lbl:'ALN',   group:'aux',  led:'off'   },
+];
+
+// ── Layer 2: Parameter Ring ──────────────────────────
+// Radial discrete mix_target selector
+const RING_TARGETS = MIX_TARGETS; // 7 items
+
+// ── Layer 3: Pitch spiral (musical topology) ─────────
+// 2 octaves chromatic, C3(48)–B4(71) = 24 nodes
+// Archimedean spiral, 2 turns so each revolution = 1 octave
+// => adjacent on arm = semitone, adjacent across arm = octave
+const PITCH_NODES = [];
+for (let i = 0; i < 24; i++) {
+  const midi   = 48 + i;              // C3 = 48
+  const pc     = midi % 12;           // pitch class 0-11
+  const octave = Math.floor(midi / 12) - 4;
+  const isSharp = [1,3,6,8,10].includes(pc);
+  PITCH_NODES.push({
+    id: i, midi, pc, octave,
+    name: NOTE_NAMES[pc] + (Math.floor(midi / 12) - 1),
+    isSharp,
+    // Musical neighbours: semitone ±1, octave ±12
+    neighbors: [i - 1, i + 1, i - 12, i + 12].filter(n => n >= 0 && n < 24),
+  });
+}
+
+// ── Layer 4: Center cluster ──────────────────────────
+const TRANSPORT = [
+  { id:'stop',  sym:'■', ledCol:'off',   on:false },
+  { id:'play',  sym:'▸', ledCol:'green', on:true  },
+  { id:'pause', sym:'⏸', ledCol:'off',   on:false },
+  { id:'rec',   sym:'●', ledCol:'red',   on:false },
+];
+const SCALE_MODES = [
+  { id:'chromatic', lbl:'CHR' },
+  { id:'major',     lbl:'MAJ' },
+  { id:'minor',     lbl:'MIN' },
+  { id:'modal',     lbl:'MOD' },
+];
+
+// ════════════════════════════════════════════════════
 // State
-// ══════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════
 const state = {
   playing:       true,
   tempo:         120,
   activePage:    0,
   activeBank:    0,
-  selectedTrack: 0,
+  selectedTrack: -1,
   selectedStep:  -1,
-  tracks: Array.from({ length: T }, () => ({
-    length:    16,
-    direction: 1,   // 1=fwd 2=rev 3=ping 4=brownian 5=random
-    speed:     1,
-    offset:    0,
-    muted:     false,
-    vel:       100,
-    mch:       1,
-    grv:       0,
+  selectedAttr:  'vel',
+  mixTarget:     'VEL',
+  scale:         'chromatic',
+  currentMode:   'page',
+  auxActive:     {},
+  tracks: Array.from({ length: T }, (_, ti) => ({
+    length:      16,
+    direction:   1,
+    speed:       1,
+    muted:       false,
+    vel:         100,
+    mch:         ti + 1,
+    grv:         0,
     playheadPos: 0,
     steps: Array.from({ length: S }, () => ({
-      active:    false,
-      skip:      false,
-      hasChord:  false,
-      pitOffset: 0,
-      velOffset: 0,
-      len:       12,
-      sta:       0,
-      amt:       100,
+      active: false, skip: false, hasChord: false,
+      pitOffset:0, velOffset:0, len:12, sta:0, amt:100,
     }))
   }))
 };
 
-// Demo seed — polyrhythmic pattern
+// Demo seed — polyrhythmic
 (function seed() {
-  const pats   = [
+  const pats = [
     [0,4,8,12],[0,6,10],[0,2,4,8,10],[0,3,6,9,12],
-    [0,4,8,12],[0,7],[0,2,5,7,10],[0,3,6,9],[0,8],[0,4,8]
+    [0,4,8,12],[0,7],[0,2,5,7,10],[0,3,6,9],[0,8],[0,4,8],
   ];
-  const lens   = [16,15,14,13,16,12,7,11,16,9];
+  const lens = [16,15,14,13,16,12,7,11,16,9];
   for (let ti = 0; ti < T; ti++) {
     state.tracks[ti].length = lens[ti];
-    (pats[ti] || []).forEach(si => { state.tracks[ti].steps[si].active = true; });
+    pats[ti].forEach(si => { if (si < lens[ti]) state.tracks[ti].steps[si].active = true; });
   }
+  state.tracks[3].steps[6].hasChord = true;
+  state.tracks[7].steps[3].skip     = true;
 })();
 
-// ══════════════════════════════════════════════════════════════
-// DOM: build grid
-// ══════════════════════════════════════════════════════════════
-const stepEls = [];  // [ti][si] → element
+// ════════════════════════════════════════════════════
+// LEFT PANEL — build
+// ════════════════════════════════════════════════════
+let painting = null;
+const stepEls = [];   // [ti][si]
 
-function buildGrid() {
-  // Beat-number header
-  const hdr = document.getElementById('grid-hdr');
-  hdr.innerHTML = '';
-  hdr.appendChild(Object.assign(document.createElement('div'),
-    { style: 'width:26px;flex-shrink:0' }));
-  for (let g = 0; g < 4; g++) {
-    const grp = document.createElement('div');
-    grp.className = 'beat-group';
-    for (let b = 0; b < 4; b++) {
-      const n = document.createElement('div');
-      n.className = 'beat-num';
-      n.textContent = b === 0 ? String(g * 4 + 1) : '';
-      grp.appendChild(n);
-    }
-    hdr.appendChild(grp);
-    if (g < 3) {
-      const gap = document.createElement('div');
-      gap.className = 'beat-gap';
-      hdr.appendChild(gap);
-    }
+function buildSideCol(colId, sz, count) {
+  const col = document.getElementById(colId);
+  const lbl = col.querySelector('.ball-col-label');
+  for (let i = 0; i < count; i++) {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:2px';
+    const b = document.createElement('div');
+    b.className = `ball sz-${sz}`;
+    b.id = `${colId}-b${i}`;
+    const led = document.createElement('div');
+    led.className = 'ball-led';
+    led.id = `${colId}-led${i}`;
+    wrap.appendChild(b);
+    wrap.appendChild(led);
+    col.insertBefore(wrap, lbl);
   }
-
-  // Track rows
-  const body = document.getElementById('grid-body');
-  body.innerHTML = '';
-
-  for (let ti = 0; ti < T; ti++) {
-    const row = document.createElement('div');
-    row.className = 'track-row';
-
-    const num = Object.assign(document.createElement('div'),
-      { className: 'track-num', textContent: String(ti + 1) });
-    row.appendChild(num);
-
-    const ind = document.createElement('div');
-    ind.className = 'track-indicator';
-    ind.id = `ind-${ti}`;
-    row.appendChild(ind);
-
-    const stepsWrap = document.createElement('div');
-    stepsWrap.className = 'track-steps';
-    stepEls[ti] = [];
-
-    for (let g = 0; g < 4; g++) {
-      const grp = document.createElement('div');
-      grp.className = 'step-group';
-      for (let b = 0; b < 4; b++) {
-        const si = g * 4 + b;
-        const cell = document.createElement('div');
-        cell.className = 'step-cell';
-        cell.dataset.track = ti;
-        cell.dataset.step  = si;
-        stepEls[ti][si]    = cell;
-        cell.addEventListener('mousedown', e => {
-          e.preventDefault();
-          onStepDown(ti, si, e.shiftKey);
-        });
-        cell.addEventListener('mouseenter', () => onStepPaint(ti, si));
-        grp.appendChild(cell);
-      }
-      stepsWrap.appendChild(grp);
-    }
-    row.appendChild(stepsWrap);
-    body.appendChild(row);
-  }
-
-  document.addEventListener('mouseup', () => { painting = null; });
 }
 
-// ══════════════════════════════════════════════════════════════
-// Paint interaction
-// ══════════════════════════════════════════════════════════════
-let painting = null;
+function buildMatrix() {
+  // Side columns
+  buildSideCol('col-mix',  'lg', T);
+  buildSideCol('col-sel',  'md', T);
+  buildSideCol('col-mut',  'md', T);
+  buildSideCol('col-edit', 'lg', T);
 
+  // Attr labels (left side)
+  const attrLhs = document.getElementById('attr-lhs');
+  for (let row = 0; row < T; row++) {
+    const ti  = T - 1 - row;
+    const lbl = document.createElement('div');
+    lbl.className = 'attr-lbl' + (ATTR_LABELS[row].toLowerCase() === state.selectedAttr ? ' active' : '');
+    lbl.textContent = ATTR_LABELS[row];
+    lbl.dataset.attr = ATTR_LABELS[row].toLowerCase();
+    lbl.addEventListener('click', () => selectAttr(lbl.dataset.attr));
+    attrLhs.appendChild(lbl);
+  }
+
+  // Grid rows
+  const gridRows = document.getElementById('grid-rows');
+  document.addEventListener('mouseup', () => { painting = null; });
+
+  for (let row = 0; row < T; row++) {
+    const ti = T - 1 - row;
+    const rowEl = document.createElement('div');
+    rowEl.style.cssText = 'flex:1;min-height:0;display:flex;align-items:center;gap:3px';
+
+    // Track LED
+    const tled = document.createElement('div');
+    tled.className = 'track-led';
+    tled.id = `tled-${ti}`;
+    rowEl.appendChild(tled);
+
+    // 16 step cells in 4 beat groups
+    stepEls[ti] = [];
+    for (let si = 0; si < S; si++) {
+      const cell = document.createElement('div');
+      cell.className = 'step-cell';
+      cell.dataset.ti = ti; cell.dataset.si = si;
+      cell.addEventListener('mousedown', e => { e.preventDefault(); onStepDown(ti, si, e.shiftKey); });
+      cell.addEventListener('mouseenter', () => onStepPaint(ti, si));
+      stepEls[ti][si] = cell;
+      rowEl.appendChild(cell);
+      // Beat-group gap after every 4 steps (not after last)
+      if (si < 15 && (si + 1) % 4 === 0) {
+        const gap = document.createElement('div');
+        gap.style.cssText = 'flex-shrink:0;width:5px';
+        rowEl.appendChild(gap);
+      }
+    }
+    gridRows.appendChild(rowEl);
+  }
+}
+
+function buildBottomStrip() {
+  const strip = document.getElementById('bottom-strip');
+
+  // Page dots
+  const pgSec = document.createElement('div');
+  pgSec.className = 'bs-section';
+  const pgLabel = document.createElement('span');
+  pgLabel.className = 'bs-label'; pgLabel.textContent = 'PAGE';
+  const dots = document.createElement('div');
+  dots.id = 'page-dots'; dots.className = 'page-dots';
+  for (let p = 0; p < 8; p++) {
+    const d = document.createElement('div');
+    d.className = 'page-dot' + (p === 0 ? ' active' : '');
+    d.addEventListener('click', () => {
+      document.querySelectorAll('.page-dot').forEach(x => x.classList.remove('active'));
+      d.classList.add('active'); state.activePage = p;
+      maxAPI.send('set_active_page', state.activeBank, p);
+    });
+    dots.appendChild(d);
+  }
+  pgSec.append(pgLabel, dots);
+  strip.appendChild(pgSec);
+
+  // MIX TARGET attrs
+  const mxSec = document.createElement('div');
+  mxSec.className = 'bs-section';
+  const mxLabel = document.createElement('span');
+  mxLabel.className = 'bs-label'; mxLabel.textContent = 'MIX TARGET';
+  const mxAttrs = document.createElement('div');
+  mxAttrs.className = 'bs-attrs';
+  ATTR_LABELS.forEach(a => {
+    const item = document.createElement('div');
+    item.className = 'bs-attr' + (a.toLowerCase() === state.selectedAttr ? ' active' : '');
+    item.dataset.attr = a.toLowerCase();
+    const dot = document.createElement('div');
+    dot.className = 'bs-attr-dot' + (a.toLowerCase() === state.selectedAttr ? ' on' : '');
+    const name = document.createElement('div');
+    name.className = 'bs-attr-name'; name.textContent = a;
+    item.append(dot, name);
+    item.addEventListener('click', () => selectAttr(a.toLowerCase()));
+    mxAttrs.appendChild(item);
+  });
+  mxSec.append(mxLabel, mxAttrs);
+  strip.appendChild(mxSec);
+}
+
+function selectAttr(attr) {
+  state.selectedAttr = attr;
+  document.querySelectorAll('.attr-lbl').forEach(el =>
+    el.classList.toggle('active', el.dataset.attr === attr));
+  document.querySelectorAll('.bs-attr').forEach(el => {
+    const on = el.dataset.attr === attr;
+    el.classList.toggle('active', on);
+    el.querySelector('.bs-attr-dot')?.classList.toggle('on', on);
+  });
+  maxAPI.send('set_attr', attr);
+}
+
+// Step interactions
 function onStepDown(ti, si, shift) {
   if (shift) {
     state.tracks[ti].steps[si].skip ^= true;
     maxAPI.send('step_skip_toggle', ti, si);
-    painting = { skipMode: true };
   } else {
     const next = !state.tracks[ti].steps[si].active;
     state.tracks[ti].steps[si].active = next;
+    painting = { value: next };
     maxAPI.send('step_toggle', ti, si);
-    painting = { value: next, skipMode: false };
   }
   state.selectedTrack = ti;
   state.selectedStep  = si;
-  renderStep(ti, si);
-  updateCircRing(ti);
-  updateCtx();
+  renderGrid();
+  updatePitchNodes();
 }
-
 function onStepPaint(ti, si) {
-  if (!painting || painting.skipMode) return;
+  if (!painting) return;
   if (state.tracks[ti].steps[si].active !== painting.value) {
     state.tracks[ti].steps[si].active = painting.value;
     renderStep(ti, si);
     maxAPI.send('step_toggle', ti, si);
-    updateCircRing(ti);
   }
 }
 
-// ══════════════════════════════════════════════════════════════
-// Step rendering
-// ══════════════════════════════════════════════════════════════
 function renderStep(ti, si) {
   const el = stepEls[ti]?.[si];
   if (!el) return;
-  const tr = state.tracks[ti];
-  const st = tr.steps[si];
-
-  el.className = 'step-cell';
-  if (si >= tr.length)       el.classList.add('inactive');
-  else if (tr.muted)         { el.classList.add('muted'); if (st.active) el.classList.add('on'); }
-  else if (st.skip)          el.classList.add('skip');
-  else if (st.hasChord && st.active) el.classList.add('chord');
-  else if (st.active)        el.classList.add('on');
-
-  if (ti === state.selectedTrack && si === state.selectedStep)
-    el.classList.add('selected');
+  const tr = state.tracks[ti], st = tr.steps[si];
+  let cls = 'step-cell';
+  if (si >= tr.length)                 cls += ' inactive';
+  else if (st.skip)                    cls += ' skip';
+  else if (st.hasChord && st.active)   cls += ' chord on';
+  else if (st.active)                  cls += ' on';
+  if (tr.muted && st.active)           cls += ' muted';
+  if (ti === state.selectedTrack && si === state.selectedStep) cls += ' sel';
+  el.className = cls;
 }
-
 function renderGrid() {
   for (let ti = 0; ti < T; ti++)
     for (let si = 0; si < S; si++)
       renderStep(ti, si);
 }
 
-// ══════════════════════════════════════════════════════════════
-// Circular sequencer — SVG
-// ══════════════════════════════════════════════════════════════
-const NS  = 'http://www.w3.org/2000/svg';
-const CX  = 110, CY = 110;
-const R0  = 104, R1 = 14;   // outer, inner ring radii
+// ════════════════════════════════════════════════════
+// RIGHT PANEL — Spec v0.1 layered SVG
+// L1  outer arc      — ARC_BTNS  mode/aux segmented controls (10)
+// L2  parameter ring — RING_TARGETS mix_target selector (7)
+// L3  pitch spiral   — PITCH_NODES musical topology (24, C3–B4)
+// L4  center cluster — transport + scale + encoder
+// Playheads: LEFT PANEL ONLY (step flash + track LED)
+// ════════════════════════════════════════════════════
+const NS = 'http://www.w3.org/2000/svg';
 
-const circEls = [];  // [ti] → { arc, dots[], playhead }
+let svgW = 0, svgH = 0, CX = 0, CY = 0;
+let R_ARC  = 0;   // outer arc radius  (~43% of min dim)
+let R_RING = 0;   // parameter ring    (~27%)
+let R_SPIR = 0;   // pitch spiral max  (~13%)
 
-function ringR(ti) {
-  return R0 - ti * ((R0 - R1) / (T - 1));
-}
-
-function buildCirc() {
-  const svg = document.getElementById('circ-svg');
-  svg.innerHTML = '';
-
-  // Draw from inside out so inner rings appear on top
-  for (let ti = T - 1; ti >= 0; ti--) {
-    const r = ringR(ti);
-
-    // Faint background ring
-    const bg = mkEl('circle', { cx: CX, cy: CY, r, fill: 'none',
-      stroke: 'rgba(26,26,26,0.06)', 'stroke-width': '1' });
-    svg.appendChild(bg);
-
-    // Step-position dots (one per step slot)
-    const dots = [];
-    for (let si = 0; si < S; si++) {
-      const a   = stepAngle(si, S);
-      const dot = mkEl('circle', {
-        cx: (CX + Math.cos(a) * r).toFixed(2),
-        cy: (CY + Math.sin(a) * r).toFixed(2),
-        r: '2', fill: 'rgba(26,26,26,0.08)'
-      });
-      svg.appendChild(dot);
-      dots.push(dot);
-    }
-
-    // Active-length arc
-    const arc = mkEl('circle', { cx: CX, cy: CY, r, fill: 'none',
-      stroke: 'rgba(26,26,26,0.30)', 'stroke-width': '2.5',
-      'stroke-linecap': 'round',
-      transform: `rotate(-90,${CX},${CY})` });
-    svg.appendChild(arc);
-
-    // Playhead dot
-    const ph = mkEl('circle', { r: '3.5', fill: 'rgba(192,57,43,0.9)' });
-    svg.appendChild(ph);
-
-    circEls[ti] = { arc, dots, playhead: ph };
-    updateCircRing(ti);
-  }
-
-  // Centre dot
-  svg.appendChild(mkEl('circle', { cx: CX, cy: CY, r: '2.5',
-    fill: 'rgba(26,26,26,0.15)' }));
-}
+const arcBtnEls    = {};  // id  → { ball, led, lbl }
+const ringBtnEls   = [];  // [i] → { dot, lbl }
+const pitchNodeEls = [];  // [n] → { dot, lbl }
 
 function mkEl(tag, attrs) {
   const el = document.createElementNS(NS, tag);
@@ -535,262 +745,586 @@ function mkEl(tag, attrs) {
   return el;
 }
 
-function stepAngle(si, total) {
-  return (si / total) * Math.PI * 2 - Math.PI / 2;
+// ── Pitch spiral geometry ──────────────────────────────────────
+// 2 turns = 2 octaves. 12 nodes per revolution.
+// n=0 (C3) innermost; n=12 (C4) same angle, outer ring.
+// => adjacent on arm = semitone, same angle across = octave
+function pitchPt(n) {
+  const r = R_SPIR * (n + 1) / PITCH_NODES.length;
+  const a = (n / 12) * 2 * Math.PI - Math.PI / 2;
+  return { x: CX + r * Math.cos(a), y: CY + r * Math.sin(a) };
 }
 
-function updateCircRing(ti) {
-  const el = circEls[ti];
-  if (!el) return;
-  const tr = state.tracks[ti];
-  const r  = ringR(ti);
-  const c  = 2 * Math.PI * r;
+// ── Arc button geometry ────────────────────────────────────────
+// MODE group (6) → left semicircle  (-130° → 0°)
+// AUX  group (4) → right semicircle (  0° → +130°)
+const ARC_MODE = ARC_BTNS.filter(b => b.group === 'mode');
+const ARC_AUX  = ARC_BTNS.filter(b => b.group === 'aux');
 
-  // Arc length = active track length
-  const dash = (tr.length / S) * c;
-  el.arc.setAttribute('stroke-dasharray', `${dash.toFixed(2)} ${(c - dash).toFixed(2)}`);
-
-  // Step dots
-  for (let si = 0; si < S; si++) {
-    const st = tr.steps[si];
-    let fill;
-    if (si >= tr.length)    fill = 'rgba(26,26,26,0.03)';
-    else if (st.skip)       fill = 'rgba(192,57,43,0.65)';
-    else if (st.active)     fill = 'rgba(26,26,26,0.72)';
-    else                    fill = 'rgba(26,26,26,0.08)';
-    el.dots[si].setAttribute('fill', fill);
-  }
-
-  updatePlayheadDot(ti);
-}
-
-function updatePlayheadDot(ti) {
-  const el = circEls[ti];
-  if (!el) return;
-  const tr  = state.tracks[ti];
-  const r   = ringR(ti);
-  const pos = tr.playheadPos;
-  const a   = stepAngle(pos / tr.length * S, S);
-  el.playhead.setAttribute('cx', (CX + Math.cos(a) * r).toFixed(2));
-  el.playhead.setAttribute('cy', (CY + Math.sin(a) * r).toFixed(2));
-}
-
-// ══════════════════════════════════════════════════════════════
-// Context panel
-// ══════════════════════════════════════════════════════════════
-const DIR_NAMES = { 1:'fwd', 2:'rev', 3:'png', 4:'brn', 5:'rnd' };
-
-function updateCtx() {
-  const ti = state.selectedTrack;
-  const si = state.selectedStep;
-  const tr = state.tracks[ti];
-
-  // Step attrs
-  const stepDiv = document.getElementById('ctx-step');
-  if (si >= 0 && si < S) {
-    const st = tr.steps[si];
-    stepDiv.innerHTML =
-      attrHTML('pit', st.pitOffset) + attrHTML('vel', st.velOffset) +
-      attrHTML('len', st.len)       + attrHTML('sta', st.sta) +
-      attrHTML('prob', st.amt + '%');
+function arcBtnAngle(btn) {
+  const halfSweep = Math.PI * 0.72;
+  if (btn.group === 'mode') {
+    const i = ARC_MODE.indexOf(btn);
+    return -Math.PI * 0.72 + (i / (ARC_MODE.length - 1)) * halfSweep;
   } else {
-    stepDiv.innerHTML = '<span style="font-size:9px;color:var(--muted)">select a step</span>';
+    const i = ARC_AUX.indexOf(btn);
+    return (i / (ARC_AUX.length - 1)) * halfSweep;
+  }
+}
+
+// ── Ring target geometry ───────────────────────────────────────
+function ringTargetPt(i) {
+  const a = (i / RING_TARGETS.length) * 2 * Math.PI - Math.PI / 2;
+  return { x: CX + R_RING * Math.cos(a), y: CY + R_RING * Math.sin(a), a };
+}
+
+function buildRightPanel() {
+  const svg   = document.getElementById('right-svg');
+  const panel = svg.parentElement;
+  const rect  = panel.getBoundingClientRect();
+  svgW = rect.width  || 500;
+  svgH = rect.height || 500;
+  CX   = svgW * 0.52;
+  CY   = svgH * 0.47;
+
+  const minDim = Math.min(svgW, svgH);
+  R_ARC  = minDim * 0.43;
+  R_RING = minDim * 0.27;
+  R_SPIR = minDim * 0.13;
+
+  svg.setAttribute('viewBox', `0 0 ${svgW} ${svgH}`);
+  svg.innerHTML = '';
+  pitchNodeEls.length = 0;
+  ringBtnEls.length   = 0;
+  Object.keys(arcBtnEls).forEach(k => delete arcBtnEls[k]);
+
+  const defs = svg.appendChild(mkEl('defs', {}));
+
+  // ── Guide circles (faint dashed) ──
+  [R_ARC, R_RING].forEach(r => {
+    svg.appendChild(mkEl('circle', {
+      cx: CX, cy: CY, r,
+      fill: 'none', stroke: 'rgba(28,24,16,.05)', 'stroke-width': '0.8',
+      'stroke-dasharray': '3 5',
+    }));
+  });
+
+  // ── Arc guide line (260° sweep) ──
+  {
+    const a0 = -Math.PI * 0.72, a1 = Math.PI * 0.72;
+    const x0 = CX + R_ARC * Math.cos(a0), y0 = CY + R_ARC * Math.sin(a0);
+    const x1 = CX + R_ARC * Math.cos(a1), y1 = CY + R_ARC * Math.sin(a1);
+    svg.appendChild(mkEl('path', {
+      d: `M ${x0.toFixed(1)},${y0.toFixed(1)} A ${R_ARC},${R_ARC} 0 1,1 ${x1.toFixed(1)},${y1.toFixed(1)}`,
+      fill: 'none', stroke: 'rgba(28,24,16,.08)', 'stroke-width': '1',
+    }));
   }
 
-  // Track attrs
-  document.getElementById('ctx-track').innerHTML =
-    attrHTML('spd', tr.speed)                  +
-    attrHTML('dir', DIR_NAMES[tr.direction] || 'fwd') +
-    attrHTML('len', tr.length)                 +
-    attrHTML('grv', tr.grv)                    +
-    attrHTML('ch',  tr.mch);
-}
+  // ════ L1: Outer Arc — ARC_BTNS ════
+  {
+    const bR = R_ARC * 0.062;
+    const lR = 2.1;
+    const fs = Math.max(6.5, R_ARC * 0.044);
 
-function attrHTML(label, value) {
-  return `<div class="attr-item">
-    <div class="attr-label">${label}</div>
-    <div class="attr-value">${value}</div>
-  </div>`;
-}
+    ARC_BTNS.forEach(btn => {
+      const angle = arcBtnAngle(btn);
+      const px = CX + R_ARC * Math.cos(angle);
+      const py = CY + R_ARC * Math.sin(angle);
 
-// ══════════════════════════════════════════════════════════════
-// Transport
-// ══════════════════════════════════════════════════════════════
-document.getElementById('btn-play').addEventListener('click', () => {
-  state.playing = !state.playing;
-  document.getElementById('btn-play').classList.toggle('on', state.playing);
-  maxAPI.send('transport', state.playing ? 1 : 0);
-});
-document.getElementById('btn-stop').addEventListener('click', () => {
-  state.playing = false;
-  document.getElementById('btn-play').classList.remove('on');
-  maxAPI.send('transport', 0);
-});
-document.getElementById('btn-reset').addEventListener('click', () => maxAPI.send('reset_phase'));
+      // Ball gradient
+      const gid  = `arc-g-${btn.id}`;
+      const grad = mkEl('radialGradient', { id: gid, cx:'35%', cy:'30%', r:'65%', fx:'35%', fy:'30%' });
+      grad.innerHTML =
+        `<stop offset="0%" stop-color="#dedad0"/>` +
+        `<stop offset="40%" stop-color="#aca89e"/>` +
+        `<stop offset="70%" stop-color="#807870"/>` +
+        `<stop offset="100%" stop-color="#5c5450"/>`;
+      defs.appendChild(grad);
 
-// ══════════════════════════════════════════════════════════════
-// Page dots
-// ══════════════════════════════════════════════════════════════
-(function buildPageDots() {
-  const c = document.getElementById('page-dots');
-  for (let p = 0; p < 8; p++) {
-    const d = Object.assign(document.createElement('div'),
-      { className: 'page-dot' + (p === 0 ? ' active' : ''), title: `Page ${p + 1}` });
-    d.addEventListener('click', () => {
-      document.querySelectorAll('.page-dot').forEach(x => x.classList.remove('active'));
-      d.classList.add('active');
-      state.activePage = p;
-      maxAPI.send('set_active_page', state.activeBank, p);
+      const g = mkEl('g', { cursor: 'pointer', id: `arc-${btn.id}` });
+
+      const ball = mkEl('circle', {
+        cx: px.toFixed(1), cy: py.toFixed(1), r: bR.toFixed(1),
+        fill: `url(#${gid})`,
+        filter: `drop-shadow(0 ${(bR*0.15).toFixed(1)}px ${(bR*0.35).toFixed(1)}px rgba(0,0,0,.28))`,
+      });
+
+      // LED radially outward from ball
+      const ledDist = R_ARC + bR * 2.1;
+      const ledX = CX + ledDist * Math.cos(angle);
+      const ledY = CY + ledDist * Math.sin(angle);
+      const ledFill =
+        btn.led === 'green' ? '#46d020' :
+        btn.led === 'white' ? '#e0e0d4' :
+        btn.led === 'amber' ? '#d88820' : 'rgba(28,24,16,.12)';
+      const led = mkEl('circle', {
+        cx: ledX.toFixed(1), cy: ledY.toFixed(1), r: lR.toFixed(1), fill: ledFill,
+      });
+      if (btn.led !== 'off') led.setAttribute('filter', `drop-shadow(0 0 2px ${ledFill})`);
+
+      // Label further outward
+      const lblDist = R_ARC + bR * 4.5;
+      const lbl = mkEl('text', {
+        x: (CX + lblDist * Math.cos(angle)).toFixed(1),
+        y: (CY + lblDist * Math.sin(angle)).toFixed(1),
+        'text-anchor': 'middle', 'dominant-baseline': 'central',
+        'font-size': fs.toFixed(1),
+        'font-family': '-apple-system,Helvetica Neue,sans-serif',
+        'letter-spacing': '0.07em',
+        fill: 'rgba(28,24,16,.48)',
+      });
+      lbl.textContent = btn.lbl;
+
+      g.append(ball, led, lbl);
+      g.addEventListener('click', () => onArcBtn(btn.id));
+      svg.appendChild(g);
+      arcBtnEls[btn.id] = { ball, led, lbl };
     });
-    c.appendChild(d);
   }
-})();
 
-// ══════════════════════════════════════════════════════════════
-// Mutator buttons
-// ══════════════════════════════════════════════════════════════
-document.querySelectorAll('.mut-btn').forEach(btn => {
-  btn.addEventListener('click', () => maxAPI.send(btn.dataset.msg, state.selectedTrack));
-});
+  // ════ L2: Parameter Ring — RING_TARGETS (7 mix_target positions) ════
+  {
+    const rR = R_RING * 0.070;
+    const fs = Math.max(6, R_RING * 0.048);
+    RING_TARGETS.forEach((tgt, i) => {
+      const { x: px, y: py, a } = ringTargetPt(i);
+      const isActive = (tgt === state.mixTarget);
 
-// ══════════════════════════════════════════════════════════════
-// Max → HTML  (called via [script <fn> args] from jweb in Max)
-// ══════════════════════════════════════════════════════════════
+      const dot = mkEl('circle', {
+        cx: px.toFixed(1), cy: py.toFixed(1), r: rR.toFixed(1),
+        fill: isActive ? 'rgba(28,24,16,.62)' : 'rgba(28,24,16,.11)',
+        stroke: isActive ? 'rgba(28,24,16,.78)' : 'rgba(28,24,16,.18)',
+        'stroke-width': '0.8', cursor: 'pointer',
+      });
 
-// [script updateStep ti si active skip hasChord]
+      const lblDist = R_RING + rR * 2.9;
+      const lbl = mkEl('text', {
+        x: (CX + lblDist * Math.cos(a)).toFixed(1),
+        y: (CY + lblDist * Math.sin(a)).toFixed(1),
+        'text-anchor': 'middle', 'dominant-baseline': 'central',
+        'font-size': fs.toFixed(1),
+        'font-family': '-apple-system,Helvetica Neue,sans-serif',
+        'letter-spacing': '0.10em',
+        'font-weight': isActive ? '700' : '400',
+        fill: isActive ? 'rgba(28,24,16,.75)' : 'rgba(28,24,16,.35)',
+      });
+      lbl.textContent = tgt;
+
+      dot.addEventListener('click', () => onRingTarget(tgt, i));
+      svg.appendChild(dot);
+      svg.appendChild(lbl);
+      ringBtnEls[i] = { dot, lbl };
+    });
+  }
+
+  // ════ L3: Pitch Spiral — musical topology ════
+  // Archimedean, 2 turns, 24 nodes (C3–B4)
+  // Each revolution = 1 octave → octave adjacency is radial
+  {
+    // Spiral guide path
+    const spiralPts = PITCH_NODES.map((_, n) => {
+      const p = pitchPt(n);
+      return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+    });
+    svg.appendChild(mkEl('polyline', {
+      points: spiralPts.join(' '),
+      fill: 'none', stroke: 'rgba(28,24,16,.07)',
+      'stroke-width': '0.7', 'stroke-linejoin': 'round',
+    }));
+
+    // Octave connector lines (n ↔ n+12, same pitch class, one octave apart)
+    for (let n = 0; n < 12; n++) {
+      const p0 = pitchPt(n), p1 = pitchPt(n + 12);
+      svg.appendChild(mkEl('line', {
+        x1: p0.x.toFixed(1), y1: p0.y.toFixed(1),
+        x2: p1.x.toFixed(1), y2: p1.y.toFixed(1),
+        stroke: 'rgba(28,24,16,.07)', 'stroke-width': '0.5',
+        'stroke-dasharray': '1.5 2.5',
+      }));
+    }
+
+    // Pitch nodes
+    const fsLbl = Math.max(4.5, R_SPIR * 0.038);
+    PITCH_NODES.forEach((node, n) => {
+      const p  = pitchPt(n);
+      const nr = node.isSharp
+        ? Math.max(2.0, R_SPIR * 0.040)
+        : Math.max(2.6, R_SPIR * 0.054);
+
+      const dot = mkEl('circle', {
+        cx: p.x.toFixed(1), cy: p.y.toFixed(1), r: nr.toFixed(1),
+        fill:   node.isSharp ? 'rgba(28,24,16,.22)' : 'rgba(28,24,16,.14)',
+        stroke: node.isSharp ? 'rgba(28,24,16,.36)' : 'rgba(28,24,16,.26)',
+        'stroke-width': '0.7', cursor: 'pointer',
+      });
+
+      const lbl = mkEl('text', {
+        x: (p.x + nr * 1.65).toFixed(1),
+        y: (p.y + nr * 0.4).toFixed(1),
+        'font-size': fsLbl.toFixed(1),
+        'font-family': '-apple-system,Helvetica Neue,sans-serif',
+        fill: node.isSharp ? 'rgba(28,24,16,.28)' : 'rgba(28,24,16,.40)',
+        'pointer-events': 'none',
+      });
+      lbl.textContent = node.name;
+
+      dot.addEventListener('click', () => onPitchNode(n));
+      svg.appendChild(dot);
+      svg.appendChild(lbl);
+      pitchNodeEls[n] = { dot, lbl };
+    });
+  }
+
+  // ════ L4: Center Cluster ════
+  buildCenterCluster(svg, defs);
+
+  // Initial state paint
+  updateArcNodes();
+  updateRingNodes();
+  updatePitchNodes();
+}
+
+// ── L4: Center cluster (transport + scale + encoder) ──────────
+function buildCenterCluster(svg, defs) {
+  const fs = Math.max(7, svgH * 0.013);
+  const bR = Math.max(4.5, svgH * 0.010);
+  const lR = 1.9;
+
+  // Center cluster below/near the spiral
+  const gx = CX;
+  const gy = CY + R_SPIR * 0.30;
+
+  // ── Transport row ──
+  const tpY = gy - bR * 3.2;
+  TRANSPORT.forEach((t, i) => {
+    const tx = gx + (i - (TRANSPORT.length - 1) / 2) * (bR * 2.5);
+    const g  = mkEl('g', { cursor: 'pointer', id: `tp-${t.id}` });
+
+    const gid = `tp-g-${t.id}`;
+    const gr  = mkEl('radialGradient', { id: gid, cx:'35%', cy:'30%', r:'65%', fx:'35%', fy:'30%' });
+    gr.innerHTML = t.on
+      ? `<stop offset="0%" stop-color="#707070"/><stop offset="100%" stop-color="#282828"/>`
+      : `<stop offset="0%" stop-color="#dedad0"/><stop offset="100%" stop-color="#a0988e"/>`;
+    defs.appendChild(gr);
+
+    const ball = mkEl('circle', {
+      cx: tx, cy: tpY, r: bR,
+      fill: `url(#${gid})`,
+      filter: `drop-shadow(0 1px 3px rgba(0,0,0,.28))`,
+    });
+    const ledFill =
+      t.ledCol === 'green' ? '#46d020' :
+      t.ledCol === 'red'   ? '#d42020' :
+      t.ledCol === 'amber' ? '#d88820' : 'rgba(28,24,16,.12)';
+    const led = mkEl('circle', {
+      cx: tx, cy: tpY - bR - lR - 1, r: lR, fill: ledFill,
+    });
+    if (t.ledCol !== 'off') led.setAttribute('filter', `drop-shadow(0 0 2.5px ${ledFill})`);
+    const sym = mkEl('text', {
+      x: tx, y: (tpY + fs * 0.32).toFixed(1),
+      'text-anchor': 'middle', 'dominant-baseline': 'central',
+      'font-size': (fs * 0.70).toFixed(1),
+      'font-family': '-apple-system,sans-serif',
+      fill: t.on ? '#e8e4dc' : 'rgba(28,24,16,.48)',
+    });
+    sym.textContent = t.sym;
+    g.append(ball, led, sym);
+    g.addEventListener('click', () => onTransport(t.id));
+    svg.appendChild(g);
+  });
+
+  // ── Scale selector ──
+  const scY = gy + bR * 0.6;
+  svg.appendChild(mkEl('text', {
+    x: gx, y: (scY - bR * 1.9).toFixed(1),
+    'text-anchor': 'middle',
+    'font-size': (fs * 0.62).toFixed(1),
+    'font-family': '-apple-system,Helvetica Neue,sans-serif',
+    'letter-spacing': '0.14em',
+    fill: 'rgba(28,24,16,.32)',
+  })).textContent = 'SCALE';
+
+  SCALE_MODES.forEach((sc, i) => {
+    const sx = gx + (i - (SCALE_MODES.length - 1) / 2) * (bR * 2.2);
+    const isActive = (sc.id === state.scale);
+    const g = mkEl('g', { cursor: 'pointer', id: `sc-${sc.id}` });
+    const ball = mkEl('circle', {
+      cx: sx, cy: scY, r: (bR * 0.70).toFixed(1),
+      fill: isActive ? 'rgba(28,24,16,.52)' : 'rgba(28,24,16,.09)',
+      stroke: 'rgba(28,24,16,.18)', 'stroke-width': '0.6',
+    });
+    const lbl = mkEl('text', {
+      x: sx, y: (scY + bR * 1.55).toFixed(1),
+      'text-anchor': 'middle',
+      'font-size': (fs * 0.57).toFixed(1),
+      'font-family': '-apple-system,Helvetica Neue,sans-serif',
+      fill: isActive ? 'rgba(28,24,16,.68)' : 'rgba(28,24,16,.30)',
+    });
+    lbl.textContent = sc.lbl;
+    g.append(ball, lbl);
+    g.addEventListener('click', () => onScaleMode(sc.id));
+    svg.appendChild(g);
+  });
+
+  // ── Main encoder (top-right quadrant, large metallic ball) ──
+  const eR  = Math.max(10, svgH * 0.029);
+  const ex  = CX + R_ARC * 1.10;
+  const ey  = CY - R_ARC * 0.64;
+  const eid = 'enc-main-g';
+  const eg  = mkEl('radialGradient', { id: eid, cx:'33%', cy:'28%', r:'65%', fx:'33%', fy:'28%' });
+  eg.innerHTML =
+    `<stop offset="0%" stop-color="#e4e0d8"/>` +
+    `<stop offset="40%" stop-color="#b8b0a4"/>` +
+    `<stop offset="75%" stop-color="#8c8478"/>` +
+    `<stop offset="100%" stop-color="#6c6460"/>`;
+  defs.appendChild(eg);
+  svg.appendChild(mkEl('circle', {
+    cx: ex, cy: ey, r: eR,
+    fill: `url(#${eid})`,
+    filter: `drop-shadow(0 3px 7px rgba(0,0,0,.42))`,
+    cursor: 'pointer',
+  }));
+  svg.appendChild(mkEl('ellipse', {
+    cx: (ex - eR * 0.20).toFixed(1), cy: (ey - eR * 0.26).toFixed(1),
+    rx: (eR * 0.30).toFixed(1),      ry: (eR * 0.20).toFixed(1),
+    fill: 'rgba(255,255,255,.46)', 'pointer-events': 'none',
+  }));
+  svg.appendChild(mkEl('text', {
+    x: ex, y: (ey + eR + fs * 1.05).toFixed(1),
+    'text-anchor': 'middle',
+    'font-size': (fs * 0.64).toFixed(1),
+    'font-family': '-apple-system,Helvetica Neue,sans-serif',
+    'letter-spacing': '0.14em',
+    fill: 'rgba(28,24,16,.33)',
+  })).textContent = 'TEMPO';
+}
+
+// ── Update L1: Arc button LEDs / labels ───────────────────────
+function updateArcNodes() {
+  ARC_BTNS.forEach(btn => {
+    const els = arcBtnEls[btn.id];
+    if (!els) return;
+    const isActive = btn.group === 'mode'
+      ? state.currentMode === btn.id
+      : !!(state.auxActive?.[btn.id]);
+    const litCol =
+      btn.led === 'green' ? '#46d020' :
+      btn.led === 'white' ? '#e0e0d4' :
+      btn.led === 'amber' ? '#d88820' : '#46d020';
+    const fill = isActive ? litCol : 'rgba(28,24,16,.12)';
+    els.led.setAttribute('fill', fill);
+    if (isActive) els.led.setAttribute('filter', `drop-shadow(0 0 3px ${litCol})`);
+    else          els.led.removeAttribute('filter');
+    els.lbl.setAttribute('fill', isActive ? 'rgba(28,24,16,.80)' : 'rgba(28,24,16,.45)');
+    els.lbl.setAttribute('font-weight', isActive ? '600' : '400');
+  });
+}
+
+// ── Update L2: Ring target dots ───────────────────────────────
+function updateRingNodes() {
+  RING_TARGETS.forEach((tgt, i) => {
+    const els = ringBtnEls[i];
+    if (!els) return;
+    const isActive = tgt === state.mixTarget;
+    els.dot.setAttribute('fill',   isActive ? 'rgba(28,24,16,.62)' : 'rgba(28,24,16,.11)');
+    els.dot.setAttribute('stroke', isActive ? 'rgba(28,24,16,.78)' : 'rgba(28,24,16,.18)');
+    els.lbl.setAttribute('fill',        isActive ? 'rgba(28,24,16,.78)' : 'rgba(28,24,16,.35)');
+    els.lbl.setAttribute('font-weight', isActive ? '700' : '400');
+  });
+}
+
+// ── Update L3: Pitch node colours ────────────────────────────
+function updatePitchNodes() {
+  const selTrack = state.selectedTrack >= 0 ? state.tracks[state.selectedTrack] : null;
+  const selStep  = selTrack && state.selectedStep >= 0 ? selTrack.steps[state.selectedStep] : null;
+
+  PITCH_NODES.forEach((node, n) => {
+    const els = pitchNodeEls[n];
+    if (!els) return;
+    const isAssigned = selStep && selStep.pitOffset === node.midi;
+    const isC        = node.pc === 0;   // C = octave root
+    let fill, stroke, r;
+    if (isAssigned) {
+      fill   = 'rgba(210,130,20,.88)';
+      stroke = 'rgba(210,130,20,.95)';
+      r = Math.max(2.8, R_SPIR * 0.060);
+    } else if (isC) {
+      fill   = 'rgba(28,24,16,.30)';
+      stroke = 'rgba(28,24,16,.52)';
+      r = Math.max(2.6, R_SPIR * 0.050);
+    } else if (node.isSharp) {
+      fill   = 'rgba(28,24,16,.20)';
+      stroke = 'rgba(28,24,16,.34)';
+      r = Math.max(2.0, R_SPIR * 0.038);
+    } else {
+      fill   = 'rgba(28,24,16,.12)';
+      stroke = 'rgba(28,24,16,.24)';
+      r = Math.max(2.4, R_SPIR * 0.048);
+    }
+    els.dot.setAttribute('fill',   fill);
+    els.dot.setAttribute('stroke', stroke);
+    els.dot.setAttribute('r',      r.toFixed(1));
+  });
+}
+
+// ── Interactions ──────────────────────────────────────────────
+function onArcBtn(id) {
+  const btn = ARC_BTNS.find(b => b.id === id);
+  if (!btn) return;
+  if (btn.group === 'mode') {
+    state.currentMode = id;
+    maxAPI.send('set_mode', id);
+  } else {
+    if (!state.auxActive) state.auxActive = {};
+    state.auxActive[id] = !state.auxActive[id];
+  }
+  updateArcNodes();
+}
+
+function onRingTarget(tgt) {
+  state.mixTarget = tgt;
+  selectAttr(tgt.toLowerCase());
+  updateRingNodes();
+}
+
+function onPitchNode(n) {
+  const node = PITCH_NODES[n];
+  if (!node || state.selectedTrack < 0 || state.selectedStep < 0) return;
+  state.tracks[state.selectedTrack].steps[state.selectedStep].pitOffset = node.midi;
+  maxAPI.send('step_pitch', state.selectedTrack, state.selectedStep, node.midi);
+  updatePitchNodes();
+}
+
+function onScaleMode(id) {
+  state.scale = id;
+  buildRightPanel();   // rebuild so scale indicator refreshes
+  maxAPI.send('set_scale', id);
+}
+
+function onTransport(id) {
+  if (id === 'play') {
+    state.playing = !state.playing;
+    maxAPI.send('transport', state.playing ? 1 : 0);
+  } else if (id === 'stop' || id === 'pause') {
+    state.playing = false;
+    maxAPI.send('transport', 0);
+  } else if (id === 'rec') {
+    maxAPI.send('rec_toggle');
+  }
+}
+
+// ════════════════════════════════════════════════════
+// Max → HTML  (jweb script calls)
+// ════════════════════════════════════════════════════
 window.updateStep = function(ti, si, active, skip, hasChord) {
   ti = +ti; si = +si;
-  if (isNaN(ti) || ti < 0 || ti >= T) return;
-  if (isNaN(si) || si < 0 || si >= S) return;
+  if (ti < 0 || ti >= T || si < 0 || si >= S) return;
   const st = state.tracks[ti].steps[si];
-  st.active   = !!+active;
-  st.skip     = !!+skip;
-  st.hasChord = !!+hasChord;
+  st.active = !!+active; st.skip = !!+skip; st.hasChord = !!+hasChord;
   renderStep(ti, si);
-  updateCircRing(ti);
+  updateArcNodes();
 };
 
-// [script updatePlayhead ti pos]
 window.updatePlayhead = function(ti, pos) {
   ti = +ti; pos = +pos;
-  if (isNaN(ti) || ti < 0 || ti >= T) return;
-  const tr = state.tracks[ti];
-  tr.playheadPos = pos;
-  updatePlayheadDot(ti);
-
-  // Flash active step cell
+  if (ti < 0 || ti >= T) return;
+  state.tracks[ti].playheadPos = pos;
+  // Left-panel only: flash step cell + pulse track LED
   const si = Math.floor(pos) % S;
   const el = stepEls[ti]?.[si];
-  if (el && tr.steps[si]?.active) {
+  if (el && state.tracks[ti].steps[si]?.active) {
     el.classList.remove('flash');
-    requestAnimationFrame(() => el.classList.add('flash'));
+    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('flash')));
   }
-
-  // Pulse track indicator
-  const ind = document.getElementById(`ind-${ti}`);
-  if (ind) {
-    ind.classList.add('live');
-    clearTimeout(ind._t);
-    ind._t = setTimeout(() => ind.classList.remove('live'), 80);
-  }
+  const led = document.getElementById(`tled-${ti}`);
+  if (led) { led.classList.add('lit'); clearTimeout(led._t); led._t = setTimeout(() => led.classList.remove('lit'), 70); }
 };
 
-// [script setTempo bpm]
-window.setTempo = function(bpm) {
-  state.tempo = Math.round(+bpm);
-  const el = document.getElementById('tempo-val');
-  if (el) el.textContent = state.tempo;
-};
+window.setTempo     = bpm => { state.tempo   = Math.round(+bpm || 120); };
+window.setTransport = r   => { state.playing = !!+r; };
 
-// [script setTransport running]
-window.setTransport = function(running) {
-  state.playing = !!+running;
-  document.getElementById('btn-play').classList.toggle('on', state.playing);
-};
-
-// [script loadPage jsonString]  — bulk state update from Max Dict
-window.loadPage = function(json) {
+window.loadPage = json => {
   try {
     const page = JSON.parse(String(json));
     if (!page?.tracks) return;
     page.tracks.forEach((t, ti) => {
       if (ti >= T) return;
       const tr = state.tracks[ti];
-      tr.length    = t.len       || 16;
-      tr.direction = t.dir       || 1;
-      tr.muted     = !!t.muted;
-      tr.vel       = t.vel       || 100;
-      tr.mch       = t.mch       || 1;
-      tr.grv       = t.grv       || 0;
-      tr.speed     = parseFloat(t.multiplier) || 1;
-      if (t.steps) {
-        t.steps.forEach((s, si) => {
-          if (si >= S) return;
-          const st = tr.steps[si];
-          st.active    = !!s.active;
-          st.skip      = !!s.skip;
-          st.hasChord  = (s.chords?.length || 0) > 0;
-          st.pitOffset = s.pit_offset || 0;
-          st.velOffset = s.vel_offset || 0;
-          st.len       = s.len        || 12;
-          st.sta       = s.sta_offset || 0;
-          st.amt       = s.amt        || 100;
-        });
-      }
+      if (t.len)           tr.length    = t.len;
+      if (t.dir)           tr.direction = t.dir;
+      if (t.muted != null) tr.muted     = !!t.muted;
+      if (t.steps) t.steps.forEach((s, si) => {
+        if (si >= S) return;
+        const st = tr.steps[si];
+        if (s.active != null)  st.active   = !!s.active;
+        if (s.skip   != null)  st.skip     = !!s.skip;
+        if (s.chords != null)  st.hasChord = (s.chords?.length || 0) > 0;
+      });
     });
     renderGrid();
-    buildCirc();
-    updateCtx();
-  } catch (e) { /* silent — Max may send partial updates */ }
+    updateArcNodes(); updateRingNodes(); updatePitchNodes();
+  } catch (_) {}
 };
 
-// ══════════════════════════════════════════════════════════════
-// Standalone demo animation (skipped when running inside jweb)
-// ══════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════
+// Standalone demo animation (no Max connected)
+// ════════════════════════════════════════════════════
 if (typeof window.max === 'undefined') {
-  const MS = (60000 / state.tempo) / 4;  // ms per 1/16 note
   const ticks = new Array(T).fill(0);
-  let lastT = performance.now();
-  let accum = 0;
+  let last = performance.now(), accum = 0;
 
-  function demoFrame(now) {
-    accum += now - lastT;
-    lastT  = now;
-    while (accum >= MS) {
-      accum -= MS;
+  (function loop(now) {
+    const ms = (60000 / state.tempo) / 4;
+    accum += now - last; last = now;
+    while (accum >= ms) {
+      accum -= ms;
+      if (!state.playing) break;
       for (let ti = 0; ti < T; ti++) {
         ticks[ti]++;
-        const len = state.tracks[ti].length;
-        const pos = ticks[ti] % len;
-        state.tracks[ti].playheadPos = pos;
-        updatePlayheadDot(ti);
-
-        const si  = pos % S;
-        const el  = stepEls[ti]?.[si];
-        if (el && state.tracks[ti].steps[si].active) {
-          el.classList.remove('flash');
-          requestAnimationFrame(() => el.classList.add('flash'));
+        state.tracks[ti].playheadPos = ticks[ti] % state.tracks[ti].length;
+      }
+      // Left-panel playhead indicators only
+      for (let ti = 0; ti < T; ti++) {
+        const tr  = state.tracks[ti];
+        const si  = Math.floor(tr.playheadPos) % S;
+        if (tr.steps[si]?.active) {
+          const el = stepEls[ti]?.[si];
+          if (el) { el.classList.remove('flash'); requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('flash'))); }
         }
-        const ind = document.getElementById(`ind-${ti}`);
-        if (ind) {
-          ind.classList.add('live');
-          clearTimeout(ind._t);
-          ind._t = setTimeout(() => ind.classList.remove('live'), 80);
+        const led = document.getElementById(`tled-${ti}`);
+        if (led) { led.classList.add('lit'); clearTimeout(led._t); led._t = setTimeout(() => led.classList.remove('lit'), 70); }
+      }
+      // PLAY arc button heartbeat on bar start
+      if (ticks[0] % 4 === 0 && state.playing) {
+        const playEls = arcBtnEls['play'];
+        if (playEls?.led) {
+          playEls.led.setAttribute('fill', '#e8e8dc');
+          playEls.led.setAttribute('filter', 'drop-shadow(0 0 4px #e0e0d0)');
+          clearTimeout(playEls._lt);
+          playEls._lt = setTimeout(() => {
+            playEls.led.setAttribute('fill', '#e0e0d4');
+            playEls.led.setAttribute('filter', 'drop-shadow(0 0 2px #e0e0d4)');
+          }, 120);
         }
       }
     }
-    requestAnimationFrame(demoFrame);
-  }
-  requestAnimationFrame(demoFrame);
+    requestAnimationFrame(loop);
+  })(performance.now());
 }
 
-// ══════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════
+// Resize
+// ════════════════════════════════════════════════════
+const ro = new ResizeObserver(() => buildRightPanel());
+ro.observe(document.querySelector('.panel-right'));
+
+// ════════════════════════════════════════════════════
 // Init
-// ══════════════════════════════════════════════════════════════
-buildGrid();
-buildCirc();
+// ════════════════════════════════════════════════════
+buildMatrix();
+buildBottomStrip();
 renderGrid();
-updateCtx();
+requestAnimationFrame(() => buildRightPanel());
 </script>
 </body>
 </html>
