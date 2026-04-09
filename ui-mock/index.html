@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<title>Octopus</title>
+<title>BenoQs Sequencer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&display=swap" rel="stylesheet">
 <style>
 /* ─────────────────────────────────────────────────────
    TOKENS
@@ -21,7 +24,7 @@
   --white-led:  #e8e8dc;
   --yellow-led: #d8c820;
   --accent:     #2650c0;
-  --font: -apple-system,"Helvetica Neue",system-ui,sans-serif;
+  --font: "Google Sans",-apple-system,"Helvetica Neue",system-ui,sans-serif;
 
   /* ball gradients */
   --ball-lg: radial-gradient(circle at 33% 28%, #dedad0 0%, #aaa49a 38%, #807870 68%, #605850 100%);
@@ -346,8 +349,8 @@ html, body {
 
   <!-- ══ TOP BAR ══ -->
   <div class="top-bar">
-    <span class="brand">genoQs Machines</span>
-    <span class="model">octopus</span>
+    <span class="brand">BenoQs</span>
+    <span class="model">sequencer</span>
   </div>
 
   <!-- ══ WORKSPACE ══ -->
@@ -753,7 +756,8 @@ function buildRightPanel() {
   const minDim = Math.min(svgW, svgH);
   R_ARC  = minDim * 0.40;
   R_RING = minDim * 0.25;
-  R_SPIR = minDim * 0.12;
+  // Keep the spiral clearly readable on bright displays.
+  R_SPIR = minDim * 0.18;
 
   svg.setAttribute('viewBox', `0 0 ${svgW} ${svgH}`);
   svg.innerHTML = '';
@@ -879,7 +883,8 @@ function buildRightPanel() {
     // Spiral guide polyline
     svg.appendChild(mkEl('polyline', {
       points: PITCH_NODES.map((_, n) => { const p = pitchPt(n); return `${p.x.toFixed(1)},${p.y.toFixed(1)}`; }).join(' '),
-      fill: 'none', stroke: 'rgba(28,24,16,.07)', 'stroke-width': '0.8', 'stroke-linejoin': 'round',
+      fill: 'none', stroke: 'rgba(28,24,16,.10)', 'stroke-width': '1.0', 'stroke-linejoin': 'round',
+      style: 'mix-blend-mode:multiply;',
     }));
 
     // Octave connector lines (n ↔ n+12)
@@ -888,7 +893,8 @@ function buildRightPanel() {
       svg.appendChild(mkEl('line', {
         x1: p0.x.toFixed(1), y1: p0.y.toFixed(1),
         x2: p1.x.toFixed(1), y2: p1.y.toFixed(1),
-        stroke: 'rgba(28,24,16,.06)', 'stroke-width': '0.5', 'stroke-dasharray': '1.5 2.5',
+        stroke: 'rgba(28,24,16,.08)', 'stroke-width': '0.6', 'stroke-dasharray': '1.5 2.5',
+        style: 'mix-blend-mode:multiply;',
       }));
     }
 
@@ -910,12 +916,16 @@ function buildRightPanel() {
         x: (p.x + nr * 1.7).toFixed(1), y: (p.y + nr * 0.4).toFixed(1),
         'font-size': fsLbl.toFixed(1),
         'font-family': '-apple-system,Helvetica Neue,sans-serif',
-        fill: node.isSharp ? 'rgba(28,24,16,.26)' : 'rgba(28,24,16,.38)',
+        // Hide labels by default to keep the center clean; reveal on hover/selection.
+        fill: node.isSharp ? 'rgba(28,24,16,.22)' : 'rgba(28,24,16,.34)',
+        opacity: (isC ? '0.55' : '0.00'),
         'pointer-events': 'none',
       });
       lbl.textContent = node.name;
 
       dot.addEventListener('click', () => onPitchNode(n));
+      dot.addEventListener('mouseenter', () => lbl.setAttribute('opacity', '0.70'));
+      dot.addEventListener('mouseleave', () => lbl.setAttribute('opacity', isC ? '0.55' : '0.00'));
       svg.appendChild(dot);
       svg.appendChild(lbl);
       pitchNodeEls[n] = { dot, lbl };
@@ -934,7 +944,8 @@ function buildCenterCluster(svg, defs) {
   const fs = Math.max(7, svgH * 0.013);
   const bR = Math.max(4.5, svgH * 0.010);
   const lR = 1.9;
-  const gx = CX, gy = CY + R_SPIR * 0.35;
+  // Push cluster slightly down to avoid competing with pitch labels.
+  const gx = CX, gy = CY + R_SPIR * 0.62;
 
   // Transport row
   const tpY = gy - bR * 3.5;
@@ -967,14 +978,8 @@ function buildCenterCluster(svg, defs) {
     svg.appendChild(g);
   });
 
-  // Scale row
-  const scY = gy + bR * 0.5;
-  svg.appendChild(mkEl('text', {
-    x: gx, y: (scY - bR * 2.0).toFixed(1),
-    'text-anchor': 'middle', 'font-size': (fs * 0.60).toFixed(1),
-    'font-family': '-apple-system,Helvetica Neue,sans-serif',
-    'letter-spacing': '0.14em', fill: 'rgba(28,24,16,.30)',
-  })).textContent = 'SCALE';
+  // Scale row (no header text — keep the center uncluttered)
+  const scY = gy + bR * 0.35;
 
   SCALE_MODES.forEach((sc, i) => {
     const sx       = gx + (i - (SCALE_MODES.length - 1) / 2) * (bR * 2.2);
@@ -1018,12 +1023,7 @@ function buildCenterCluster(svg, defs) {
     rx: (eR * 0.30).toFixed(1), ry: (eR * 0.20).toFixed(1),
     fill: 'rgba(255,255,255,.46)', 'pointer-events': 'none',
   }));
-  svg.appendChild(mkEl('text', {
-    x: ex, y: (ey + eR + fs * 1.05).toFixed(1),
-    'text-anchor': 'middle', 'font-size': (fs * 0.63).toFixed(1),
-    'font-family': '-apple-system,Helvetica Neue,sans-serif',
-    'letter-spacing': '0.14em', fill: 'rgba(28,24,16,.33)',
-  })).textContent = 'TEMPO';
+  // Intentionally no "TEMPO" label here — it reads as noise at this scale.
 }
 
 // ── Update L1: arc button LEDs ────────────────────────────────
@@ -1082,6 +1082,10 @@ function updatePitchNodes() {
     els.dot.setAttribute('fill',   fill);
     els.dot.setAttribute('stroke', stroke);
     els.dot.setAttribute('r',      r.toFixed(1));
+    // Labels: show C anchors faintly; show assigned pitch; otherwise hidden unless hovered.
+    if (isAssigned) els.lbl.setAttribute('opacity', '0.85');
+    else if (isC)   els.lbl.setAttribute('opacity', '0.55');
+    else            els.lbl.setAttribute('opacity', '0.00');
   });
 }
 
