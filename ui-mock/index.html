@@ -1,314 +1,369 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8"/>
   <title>Octopus</title>
   <style>
     :root {
-      --bg:         #f4f3ef;
-      --surface:    #fafaf8;
-      --border:     rgba(26,26,26,0.08);
-      --text:       #1a1a1a;
-      --muted:      rgba(26,26,26,0.38);
-      --accent:     #2d62c8;
-      --step-ring:  rgba(26,26,26,0.14);
-      --step-on:    #1a1a1a;
-      --step-skip:  #c0392b;
-      --step-chord: #b8620a;
-      --playhead:   #c0392b;
-      --font:       -apple-system, "Helvetica Neue", system-ui, sans-serif;
+      --bg:          #edeae2;
+      --divider:     rgba(28,26,20,0.09);
+      --cell-off:    rgba(28,26,20,0.10);
+      --cell-border: rgba(28,26,20,0.16);
+      --cell-on:     #252318;
+      --led-off:     rgba(28,26,20,0.11);
+      --led-green:   #48d030;
+      --led-red:     #d82828;
+      --led-amber:   #d89028;
+      --led-white:   #e8e8e0;
+      --text:        #252318;
+      --muted:       rgba(28,26,20,0.42);
+      --accent:      #2f60cc;
+      --font: -apple-system,"Helvetica Neue",system-ui,sans-serif;
     }
-    *, *::before, *::after { box-sizing: border-box; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
-      margin: 0; padding: 0;
-      width: 100%; height: 100%;
-      overflow: hidden;
+      width: 100%; height: 100%; overflow: hidden;
       background: var(--bg);
-      color: var(--text);
       font-family: var(--font);
-      font-size: 11px;
+      color: var(--text);
       -webkit-font-smoothing: antialiased;
       user-select: none;
     }
 
-    /* ── Layout ─────────────────────────────────── */
-    .app { display: flex; flex-direction: column; height: 100%; }
+    /* ══════════════ DEVICE SHELL ══════════════ */
+    .device { display: flex; width: 100%; height: 100%; }
 
-    /* ── Header ──────────────────────────────────── */
-    .header {
+    /* ══════════════ LEFT PANEL ══════════════ */
+    .panel-left {
+      flex: 1; min-width: 0;
+      display: flex; flex-direction: column;
+      padding: 9px 4px 7px 10px;
+      border-right: 1px solid var(--divider);
+    }
+
+    .pl-header {
       flex-shrink: 0;
-      height: 44px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 0 16px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 6px;
     }
-    .transport { display: flex; gap: 4px; }
-    .btn {
-      width: 26px; height: 26px;
-      border: 1px solid var(--border);
-      border-radius: 5px;
-      background: transparent;
-      color: var(--text);
-      cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      padding: 0;
-      transition: background 0.1s;
-    }
-    .btn:hover { background: var(--bg); }
-    .btn.on { background: var(--text); color: var(--surface); border-color: var(--text); }
-    .tempo {
-      display: flex; align-items: baseline; gap: 3px;
-    }
-    .tempo-label { color: var(--muted); font-size: 9px; letter-spacing: 0.1em; }
-    .tempo-value { font-size: 13px; font-weight: 500; min-width: 36px; }
-    .spacer { flex: 1; }
-    .device-name {
-      font-size: 9px; letter-spacing: 0.22em; text-transform: lowercase; color: var(--muted);
+    .logo {
+      font-size: 11px; font-style: italic;
+      letter-spacing: 0.14em; color: var(--muted);
     }
     .page-dots { display: flex; gap: 5px; align-items: center; }
     .page-dot {
-      width: 7px; height: 7px; border-radius: 50%;
-      border: 1.5px solid var(--muted);
-      cursor: pointer;
-      transition: background 0.1s, border-color 0.1s;
+      width: 6px; height: 6px; border-radius: 50%;
+      border: 1.5px solid var(--muted); cursor: pointer;
+      transition: background .1s, border-color .1s;
     }
     .page-dot.active { background: var(--text); border-color: var(--text); }
 
-    /* ── Workspace ───────────────────────────────── */
-    .workspace { flex: 1; min-height: 0; display: flex; }
-
-    /* ── Step Grid ───────────────────────────────── */
-    .grid-panel {
-      flex: 1; min-width: 0;
-      display: flex; flex-direction: column;
-      padding: 10px 8px 10px 14px;
-    }
-    .grid-header-row {
-      display: flex; align-items: center;
-      padding-left: 26px;
-      margin-bottom: 4px;
-      flex-shrink: 0;
-    }
-    .beat-group {
-      flex: 4; display: flex; gap: 3px;
-    }
-    .beat-num {
-      flex: 1; text-align: center; font-size: 8px; color: var(--muted);
-    }
-    .beat-gap { flex-shrink: 0; width: 6px; }
-
-    .grid-body {
+    /*
+      Step matrix — CSS grid with beat-group spacing
+      Cols: track-num | track-led | [beat-group ×4] × 4 | attr-label
+            14px        9px          (4×1fr + 5px) ×4     30px  = 22 cols
+    */
+    .step-matrix {
       flex: 1; min-height: 0;
-      display: flex; flex-direction: column; gap: 3px;
+      display: grid;
+      grid-template-columns: 14px 9px repeat(4,1fr) 5px repeat(4,1fr) 5px repeat(4,1fr) 5px repeat(4,1fr) 30px;
+      grid-template-rows: repeat(10, 1fr);
+      column-gap: 2px;
+      row-gap: 2px;
+      align-items: center;
     }
-    .track-row {
-      display: flex; align-items: center; gap: 4px;
-      flex: 1; min-height: 0;
+
+    .t-num {
+      font-size: 7px; color: var(--muted);
+      text-align: right; padding-right: 2px;
+      align-self: center; line-height: 1;
     }
-    .track-num {
-      flex-shrink: 0; width: 14px; text-align: right;
-      font-size: 8px; color: var(--muted);
+    .t-led {
+      width: 5px; height: 5px; border-radius: 50%;
+      background: var(--led-off);
+      justify-self: center; align-self: center;
+      transition: background .05s;
     }
-    .track-indicator {
-      flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%;
-      background: transparent; transition: background 0.08s;
-    }
-    .track-indicator.live { background: var(--playhead); }
-    .track-steps {
-      flex: 1; display: flex; gap: 6px; min-width: 0;
-    }
-    .step-group { flex: 4; display: flex; gap: 3px; }
+    .t-led.lit { background: var(--led-green); box-shadow: 0 0 3px var(--led-green); }
+
+    .beat-gap { /* spacer cols between beat groups */ }
+
     .step-cell {
-      flex: 1; border-radius: 50%;
-      border: 1.5px solid var(--step-ring);
-      background: transparent;
+      width: 100%; aspect-ratio: 1;
+      border-radius: 50%;
+      background: var(--cell-off);
+      border: 1px solid var(--cell-border);
       cursor: pointer;
-      aspect-ratio: 1;
-      min-width: 0; min-height: 0;
-      transition: background 60ms, border-color 60ms, opacity 60ms;
+      align-self: center; justify-self: center;
+      position: relative;
+      transition: background 55ms, border-color 55ms;
     }
-    .step-cell.on    { background: var(--step-on);    border-color: var(--step-on); }
-    .step-cell.skip  { background: var(--step-skip);  border-color: var(--step-skip); }
-    .step-cell.chord { background: var(--step-chord); border-color: var(--step-chord); }
-    .step-cell.selected {
-      outline: 2px solid var(--accent); outline-offset: 1px;
+    /* Ball shine */
+    .step-cell::before {
+      content: '';
+      position: absolute;
+      top: 16%; left: 22%;
+      width: 30%; height: 30%;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.42);
+      pointer-events: none;
     }
-    .step-cell.inactive { opacity: 0.12; }
-    .step-cell.muted    { opacity: 0.22; }
+    /* LED dot below ball */
+    .step-cell::after {
+      content: '';
+      position: absolute;
+      bottom: -4px; left: 50%;
+      transform: translateX(-50%);
+      width: 3px; height: 3px;
+      border-radius: 50%;
+      background: var(--led-off);
+      pointer-events: none;
+    }
+    .step-cell.on {
+      background: var(--cell-on);
+      border-color: var(--cell-on);
+    }
+    .step-cell.on::before  { background: rgba(255,255,255,0.18); }
+    .step-cell.on::after   { background: var(--led-green); box-shadow: 0 0 2px var(--led-green); }
+    .step-cell.skip        { background: var(--led-red);   border-color: var(--led-red); }
+    .step-cell.skip::after { background: var(--led-red); }
+    .step-cell.chord       { background: var(--led-amber); border-color: var(--led-amber); }
+    .step-cell.inactive    { opacity: .12; pointer-events: none; }
+    .step-cell.muted.on    { opacity: .28; }
+    .step-cell.sel         { outline: 2px solid var(--accent); outline-offset: 1px; }
 
     @keyframes ph-flash {
-      0%   { box-shadow: 0 0 0 0   rgba(192,57,43,0.65); }
-      100% { box-shadow: 0 0 0 5px rgba(192,57,43,0);    }
+      0%   { box-shadow: 0 0 0 0   rgba(72,208,48,.75); }
+      100% { box-shadow: 0 0 0 7px rgba(72,208,48,0);   }
     }
-    .step-cell.flash { animation: ph-flash 0.2s ease-out forwards; }
+    .step-cell.flash { animation: ph-flash .17s ease-out forwards; }
 
-    /* ── Circular Sequencer ──────────────────────── */
-    .circ-panel {
-      flex-shrink: 0; width: 256px;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center; gap: 6px;
-      border-left: 1px solid var(--border); padding: 10px;
+    /* Attribute labels — right column, one per track row (hardware order) */
+    .t-attr {
+      font-size: 6.5px; letter-spacing: .06em;
+      text-transform: uppercase; color: var(--muted);
+      padding-left: 4px; align-self: center;
+      cursor: pointer; white-space: nowrap;
+      transition: color .1s;
     }
-    .circ-label {
-      font-size: 8px; letter-spacing: 0.15em;
-      color: var(--muted); text-transform: lowercase;
-    }
-    #circ-svg { width: 100%; max-width: 220px; max-height: 220px; }
+    .t-attr:hover { color: var(--text); }
+    .t-attr.active { color: var(--text); font-weight: 600; }
 
-    /* ── Context Panel ───────────────────────────── */
-    .context-panel {
-      flex-shrink: 0; height: 108px;
-      border-top: 1px solid var(--border);
-      background: var(--surface);
-      display: flex;
+    .pl-footer {
+      flex-shrink: 0; margin-top: 5px;
+      display: flex; justify-content: space-between; padding: 0 2px;
     }
-    .ctx-col {
+    .pl-footer-lbl {
+      font-size: 7px; letter-spacing: .13em;
+      text-transform: uppercase; color: var(--muted);
+    }
+
+    /* ══════════════ RIGHT PANEL ══════════════ */
+    .panel-right {
       flex: 1; min-width: 0;
-      padding: 9px 14px;
-      border-right: 1px solid var(--border);
-      display: flex; flex-direction: column; gap: 6px;
+      display: flex; flex-direction: column;
+      padding: 9px 10px 7px 5px;
     }
-    .ctx-col:last-child { border-right: none; }
-    .ctx-col-title {
-      font-size: 8px; letter-spacing: 0.15em;
-      color: var(--muted); text-transform: lowercase; flex-shrink: 0;
-    }
-    .ctx-attrs { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
-    .attr-item { display: flex; flex-direction: column; gap: 2px; }
-    .attr-label { font-size: 7px; letter-spacing: 0.12em; color: var(--muted); text-transform: lowercase; }
-    .attr-value { font-size: 12px; font-weight: 500; }
 
-    .mut-row { display: flex; gap: 4px; flex-wrap: wrap; }
-    .mut-btn {
-      padding: 3px 8px;
-      border: 1px solid var(--border); border-radius: 4px;
-      background: transparent; cursor: pointer;
-      font-size: 8px; letter-spacing: 0.08em; color: var(--muted);
+    .circle-wrap {
+      flex: 1; min-height: 0;
+      display: flex; align-items: center; justify-content: center;
     }
-    .mut-btn:hover { color: var(--text); border-color: rgba(26,26,26,0.22); }
+    #circ-svg {
+      width: 100%; height: 100%;
+      max-width: 310px; max-height: 310px;
+      overflow: visible;
+    }
+
+    /* ── Controls row ── */
+    .controls-row {
+      flex-shrink: 0;
+      display: flex; gap: 6px;
+      padding-top: 6px;
+    }
+    .ctrl-box {
+      border: 1px solid var(--divider);
+      border-radius: 5px;
+      padding: 5px 8px 6px;
+    }
+    .ctrl-title {
+      font-size: 6.5px; letter-spacing: .18em;
+      text-transform: uppercase; color: var(--muted);
+      margin-bottom: 5px;
+    }
+
+    /* MODE */
+    .mode-box  { flex: 1.1; }
+    .mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; }
+
+    .mode-btn {
+      display: flex; align-items: center; gap: 4px; cursor: pointer;
+    }
+    .m-led {
+      flex-shrink: 0;
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--led-off);
+      border: 1px solid rgba(28,26,20,0.18);
+      transition: background .1s;
+    }
+    .m-led.on  { background: var(--led-green);  border-color: var(--led-green); }
+    .m-led.wht { background: var(--led-white);  box-shadow: 0 0 3px rgba(232,232,224,.7); }
+    .mode-btn-label {
+      font-size: 7px; letter-spacing: .10em;
+      text-transform: uppercase; color: var(--muted);
+      transition: color .1s;
+    }
+    .mode-btn.active .mode-btn-label { color: var(--text); }
+
+    /* SCALE */
+    .scale-box { flex: .75; }
+    .scale-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    /* TRANSPORT */
+    .transport-box { flex: 1.05; }
+    .transport-btns { display: flex; gap: 5px; align-items: center; }
+    .tp-btn {
+      width: 21px; height: 21px; border-radius: 50%;
+      border: 1px solid var(--divider);
+      background: rgba(28,26,20,0.05);
+      cursor: pointer; position: relative;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--muted); font-size: 7px; line-height: 1;
+      transition: background .1s, color .1s;
+    }
+    .tp-btn:hover { background: rgba(28,26,20,0.12); color: var(--text); }
+    .tp-btn.on    { background: var(--text); color: #edeae2; border-color: var(--text); }
+    /* LED above each transport button */
+    .tp-btn::before {
+      content: '';
+      position: absolute;
+      top: -4px; left: 50%;
+      transform: translateX(-50%);
+      width: 3.5px; height: 3.5px; border-radius: 50%;
+      background: var(--led-off);
+    }
+    .tp-btn.lg::before { background: var(--led-green); box-shadow: 0 0 2px var(--led-green); }
+    .tp-btn.lw::before { background: var(--led-white); }
+    .tp-btn.lr::before { background: var(--led-red);   }
+    .tp-btn.lp::before { background: #e060a0; }
   </style>
 </head>
 <body>
-<div class="app">
+<div class="device">
 
-  <!-- HEADER ──────────────────────────────────── -->
-  <header class="header">
-    <div class="transport">
-      <button class="btn" id="btn-stop" title="Stop">
-        <svg width="8" height="8" viewBox="0 0 8 8">
-          <rect x="0.5" y="0.5" width="7" height="7" fill="currentColor" rx="0.5"/>
-        </svg>
-      </button>
-      <button class="btn on" id="btn-play" title="Play">
-        <svg width="8" height="10" viewBox="0 0 8 10">
-          <polygon points="0.5,0.5 7.5,5 0.5,9.5" fill="currentColor"/>
-        </svg>
-      </button>
-      <button class="btn" id="btn-reset" title="Reset phase">
-        <svg width="12" height="10" viewBox="0 0 12 10">
-          <path d="M11 5A5 5 0 1 1 6 0.5" stroke="currentColor" stroke-width="1.4"
-                fill="none" stroke-linecap="round"/>
-          <polygon points="6,0.5 10,0 10,3" fill="currentColor"/>
-        </svg>
-      </button>
+  <!-- ════════════════ LEFT PANEL ════════════════ -->
+  <div class="panel-left">
+    <div class="pl-header">
+      <span class="logo">octopus</span>
+      <div class="page-dots" id="page-dots"></div>
     </div>
 
-    <div class="tempo">
-      <span class="tempo-label">bpm</span>
-      <span class="tempo-value" id="tempo-val">120</span>
+    <div class="step-matrix" id="step-matrix"></div>
+
+    <div class="pl-footer">
+      <span class="pl-footer-lbl">mix</span>
+      <span class="pl-footer-lbl">sel</span>
+      <span class="pl-footer-lbl">trk</span>
+      <span class="pl-footer-lbl">mute</span>
+      <span class="pl-footer-lbl">edit</span>
     </div>
-
-    <div class="spacer"></div>
-    <span class="device-name">octopus</span>
-    <div class="spacer"></div>
-
-    <div class="page-dots" id="page-dots"></div>
-  </header>
-
-  <!-- WORKSPACE ───────────────────────────────── -->
-  <div class="workspace">
-
-    <!-- Step grid -->
-    <div class="grid-panel">
-      <div class="grid-header-row" id="grid-hdr"></div>
-      <div class="grid-body"       id="grid-body"></div>
-    </div>
-
-    <!-- Circular sequencer -->
-    <div class="circ-panel">
-      <span class="circ-label">time · phase</span>
-      <svg id="circ-svg" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg"></svg>
-    </div>
-
   </div>
 
-  <!-- CONTEXT PANEL ───────────────────────────── -->
-  <div class="context-panel">
-    <div class="ctx-col">
-      <div class="ctx-col-title">step</div>
-      <div class="ctx-attrs" id="ctx-step">
-        <span style="font-size:9px;color:var(--muted)">select a step</span>
-      </div>
+  <!-- ════════════════ RIGHT PANEL ════════════════ -->
+  <div class="panel-right">
+    <div class="circle-wrap">
+      <svg id="circ-svg" viewBox="0 0 310 310" xmlns="http://www.w3.org/2000/svg"></svg>
     </div>
-    <div class="ctx-col">
-      <div class="ctx-col-title">track</div>
-      <div class="ctx-attrs" id="ctx-track">
-        <span style="font-size:9px;color:var(--muted)">–</span>
+
+    <div class="controls-row">
+      <!-- MODE -->
+      <div class="ctrl-box mode-box">
+        <div class="ctrl-title">mode</div>
+        <div class="mode-grid" id="mode-grid"></div>
       </div>
-    </div>
-    <div class="ctx-col" style="flex:0.65;flex-shrink:0">
-      <div class="ctx-col-title">mutators</div>
-      <div class="mut-row">
-        <button class="mut-btn" data-msg="randomize">rnd</button>
-        <button class="mut-btn" data-msg="clear">clr</button>
-        <button class="mut-btn" data-msg="reverse">rev</button>
-        <button class="mut-btn" data-msg="rotate">rot</button>
-        <button class="mut-btn" data-msg="copy">copy</button>
+
+      <!-- SCALE -->
+      <div class="ctrl-box scale-box">
+        <div class="ctrl-title">scale</div>
+        <div class="scale-btns" id="scale-btns"></div>
+      </div>
+
+      <!-- TRANSPORT -->
+      <div class="ctrl-box transport-box">
+        <div class="ctrl-title">transport</div>
+        <div class="transport-btns" id="transport-btns"></div>
       </div>
     </div>
   </div>
 
-</div><!-- .app -->
+</div>
 
 <script>
-// ══════════════════════════════════════════════════════════════
-// Max bridge — safe in both standalone and jweb contexts
-// ══════════════════════════════════════════════════════════════
+// ──────────────────────────────────────────────────────────────
+// Max bridge
+// ──────────────────────────────────────────────────────────────
 const maxAPI = (() => {
-  if (typeof window.max !== 'undefined') {
-    return { send: (...a) => window.max.outlet(...a) };
-  }
+  if (typeof window.max !== 'undefined') return { send: (...a) => window.max.outlet(...a) };
   return { send: (...a) => console.log('[→ Max]', ...a) };
 })();
 
-// ══════════════════════════════════════════════════════════════
+// ──────────────────────────────────────────────────────────────
 // Constants
-// ══════════════════════════════════════════════════════════════
-const T = 10;   // tracks
-const S = 16;   // steps
+// ──────────────────────────────────────────────────────────────
+const T = 10;  // tracks
+const S = 16;  // steps per track
 
-// ══════════════════════════════════════════════════════════════
+const ATTR_LABELS = ['VEL','PIT','LEN','STA','POS','DIR','AMT','GRV','MCC','MCH'];
+// Hardware order: VEL on track 9 (top row), MCH on track 0 (bottom row)
+
+const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+const MODES = [
+  { id:'grid',  label:'GRID'  },
+  { id:'page',  label:'PAGE'  },
+  { id:'track', label:'TRACK' },
+  { id:'step',  label:'STEP'  },
+  { id:'map',   label:'MAP'   },
+  { id:'play',  label:'PLAY'  },
+];
+
+const SCALE_BTNS = [
+  { id:'mod', label:'MOD' },
+  { id:'sel', label:'SEL', on: true },
+  { id:'cad', label:'CAD' },
+];
+
+// Transport: [id, unicode-symbol, led-class, initially-on]
+const TRANSPORT = [
+  { id:'cancel', sym:'×',  led:''   },
+  { id:'back',   sym:'◂',  led:''   },
+  { id:'rec',    sym:'●',  led:'lr' },
+  { id:'stop',   sym:'■',  led:''   },
+  { id:'pause',  sym:'⏸',  led:''   },
+  { id:'play',   sym:'▸',  led:'lg', on: true },
+];
+
+// ──────────────────────────────────────────────────────────────
 // State
-// ══════════════════════════════════════════════════════════════
+// ──────────────────────────────────────────────────────────────
 const state = {
   playing:       true,
   tempo:         120,
   activePage:    0,
   activeBank:    0,
-  selectedTrack: 0,
+  selectedTrack: -1,
   selectedStep:  -1,
-  tracks: Array.from({ length: T }, () => ({
-    length:    16,
-    direction: 1,   // 1=fwd 2=rev 3=ping 4=brownian 5=random
-    speed:     1,
-    offset:    0,
-    muted:     false,
-    vel:       100,
-    mch:       1,
-    grv:       0,
+  selectedAttr:  'vel',
+  currentMode:   'page',
+  tracks: Array.from({ length: T }, (_, ti) => ({
+    length:      16,
+    direction:   1,
+    speed:       1,
+    offset:      0,
+    muted:       false,
+    vel:         100,
+    mch:         ti + 1,
+    grv:         0,
     playheadPos: 0,
     steps: Array.from({ length: S }, () => ({
       active:    false,
@@ -323,319 +378,41 @@ const state = {
   }))
 };
 
-// Demo seed — polyrhythmic pattern
+// Demo seed — polyrhythmic pattern showing hardware-like layout
 (function seed() {
-  const pats   = [
-    [0,4,8,12],[0,6,10],[0,2,4,8,10],[0,3,6,9,12],
-    [0,4,8,12],[0,7],[0,2,5,7,10],[0,3,6,9],[0,8],[0,4,8]
+  const pats = [
+    [0,4,8,12],       // track 0
+    [0,6,10],         // track 1
+    [0,2,4,8,10],     // track 2
+    [0,3,6,9,12],     // track 3
+    [0,4,8,12],       // track 4
+    [0,7],            // track 5
+    [0,2,5,7,10],     // track 6
+    [0,3,6,9],        // track 7
+    [0,8],            // track 8
+    [0,4,8],          // track 9
   ];
-  const lens   = [16,15,14,13,16,12,7,11,16,9];
+  const lens = [16,15,14,13,16,12,7,11,16,9];
   for (let ti = 0; ti < T; ti++) {
     state.tracks[ti].length = lens[ti];
-    (pats[ti] || []).forEach(si => { state.tracks[ti].steps[si].active = true; });
+    pats[ti].forEach(si => {
+      if (si < lens[ti]) state.tracks[ti].steps[si].active = true;
+    });
   }
+  // A couple of chord and skip examples
+  state.tracks[3].steps[6].hasChord = true;
+  state.tracks[7].steps[3].skip     = true;
 })();
 
-// ══════════════════════════════════════════════════════════════
-// DOM: build grid
-// ══════════════════════════════════════════════════════════════
-const stepEls = [];  // [ti][si] → element
-
-function buildGrid() {
-  // Beat-number header
-  const hdr = document.getElementById('grid-hdr');
-  hdr.innerHTML = '';
-  hdr.appendChild(Object.assign(document.createElement('div'),
-    { style: 'width:26px;flex-shrink:0' }));
-  for (let g = 0; g < 4; g++) {
-    const grp = document.createElement('div');
-    grp.className = 'beat-group';
-    for (let b = 0; b < 4; b++) {
-      const n = document.createElement('div');
-      n.className = 'beat-num';
-      n.textContent = b === 0 ? String(g * 4 + 1) : '';
-      grp.appendChild(n);
-    }
-    hdr.appendChild(grp);
-    if (g < 3) {
-      const gap = document.createElement('div');
-      gap.className = 'beat-gap';
-      hdr.appendChild(gap);
-    }
-  }
-
-  // Track rows
-  const body = document.getElementById('grid-body');
-  body.innerHTML = '';
-
-  for (let ti = 0; ti < T; ti++) {
-    const row = document.createElement('div');
-    row.className = 'track-row';
-
-    const num = Object.assign(document.createElement('div'),
-      { className: 'track-num', textContent: String(ti + 1) });
-    row.appendChild(num);
-
-    const ind = document.createElement('div');
-    ind.className = 'track-indicator';
-    ind.id = `ind-${ti}`;
-    row.appendChild(ind);
-
-    const stepsWrap = document.createElement('div');
-    stepsWrap.className = 'track-steps';
-    stepEls[ti] = [];
-
-    for (let g = 0; g < 4; g++) {
-      const grp = document.createElement('div');
-      grp.className = 'step-group';
-      for (let b = 0; b < 4; b++) {
-        const si = g * 4 + b;
-        const cell = document.createElement('div');
-        cell.className = 'step-cell';
-        cell.dataset.track = ti;
-        cell.dataset.step  = si;
-        stepEls[ti][si]    = cell;
-        cell.addEventListener('mousedown', e => {
-          e.preventDefault();
-          onStepDown(ti, si, e.shiftKey);
-        });
-        cell.addEventListener('mouseenter', () => onStepPaint(ti, si));
-        grp.appendChild(cell);
-      }
-      stepsWrap.appendChild(grp);
-    }
-    row.appendChild(stepsWrap);
-    body.appendChild(row);
-  }
-
-  document.addEventListener('mouseup', () => { painting = null; });
-}
-
-// ══════════════════════════════════════════════════════════════
-// Paint interaction
-// ══════════════════════════════════════════════════════════════
-let painting = null;
-
-function onStepDown(ti, si, shift) {
-  if (shift) {
-    state.tracks[ti].steps[si].skip ^= true;
-    maxAPI.send('step_skip_toggle', ti, si);
-    painting = { skipMode: true };
-  } else {
-    const next = !state.tracks[ti].steps[si].active;
-    state.tracks[ti].steps[si].active = next;
-    maxAPI.send('step_toggle', ti, si);
-    painting = { value: next, skipMode: false };
-  }
-  state.selectedTrack = ti;
-  state.selectedStep  = si;
-  renderStep(ti, si);
-  updateCircRing(ti);
-  updateCtx();
-}
-
-function onStepPaint(ti, si) {
-  if (!painting || painting.skipMode) return;
-  if (state.tracks[ti].steps[si].active !== painting.value) {
-    state.tracks[ti].steps[si].active = painting.value;
-    renderStep(ti, si);
-    maxAPI.send('step_toggle', ti, si);
-    updateCircRing(ti);
-  }
-}
-
-// ══════════════════════════════════════════════════════════════
-// Step rendering
-// ══════════════════════════════════════════════════════════════
-function renderStep(ti, si) {
-  const el = stepEls[ti]?.[si];
-  if (!el) return;
-  const tr = state.tracks[ti];
-  const st = tr.steps[si];
-
-  el.className = 'step-cell';
-  if (si >= tr.length)       el.classList.add('inactive');
-  else if (tr.muted)         { el.classList.add('muted'); if (st.active) el.classList.add('on'); }
-  else if (st.skip)          el.classList.add('skip');
-  else if (st.hasChord && st.active) el.classList.add('chord');
-  else if (st.active)        el.classList.add('on');
-
-  if (ti === state.selectedTrack && si === state.selectedStep)
-    el.classList.add('selected');
-}
-
-function renderGrid() {
-  for (let ti = 0; ti < T; ti++)
-    for (let si = 0; si < S; si++)
-      renderStep(ti, si);
-}
-
-// ══════════════════════════════════════════════════════════════
-// Circular sequencer — SVG
-// ══════════════════════════════════════════════════════════════
-const NS  = 'http://www.w3.org/2000/svg';
-const CX  = 110, CY = 110;
-const R0  = 104, R1 = 14;   // outer, inner ring radii
-
-const circEls = [];  // [ti] → { arc, dots[], playhead }
-
-function ringR(ti) {
-  return R0 - ti * ((R0 - R1) / (T - 1));
-}
-
-function buildCirc() {
-  const svg = document.getElementById('circ-svg');
-  svg.innerHTML = '';
-
-  // Draw from inside out so inner rings appear on top
-  for (let ti = T - 1; ti >= 0; ti--) {
-    const r = ringR(ti);
-
-    // Faint background ring
-    const bg = mkEl('circle', { cx: CX, cy: CY, r, fill: 'none',
-      stroke: 'rgba(26,26,26,0.06)', 'stroke-width': '1' });
-    svg.appendChild(bg);
-
-    // Step-position dots (one per step slot)
-    const dots = [];
-    for (let si = 0; si < S; si++) {
-      const a   = stepAngle(si, S);
-      const dot = mkEl('circle', {
-        cx: (CX + Math.cos(a) * r).toFixed(2),
-        cy: (CY + Math.sin(a) * r).toFixed(2),
-        r: '2', fill: 'rgba(26,26,26,0.08)'
-      });
-      svg.appendChild(dot);
-      dots.push(dot);
-    }
-
-    // Active-length arc
-    const arc = mkEl('circle', { cx: CX, cy: CY, r, fill: 'none',
-      stroke: 'rgba(26,26,26,0.30)', 'stroke-width': '2.5',
-      'stroke-linecap': 'round',
-      transform: `rotate(-90,${CX},${CY})` });
-    svg.appendChild(arc);
-
-    // Playhead dot
-    const ph = mkEl('circle', { r: '3.5', fill: 'rgba(192,57,43,0.9)' });
-    svg.appendChild(ph);
-
-    circEls[ti] = { arc, dots, playhead: ph };
-    updateCircRing(ti);
-  }
-
-  // Centre dot
-  svg.appendChild(mkEl('circle', { cx: CX, cy: CY, r: '2.5',
-    fill: 'rgba(26,26,26,0.15)' }));
-}
-
-function mkEl(tag, attrs) {
-  const el = document.createElementNS(NS, tag);
-  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
-  return el;
-}
-
-function stepAngle(si, total) {
-  return (si / total) * Math.PI * 2 - Math.PI / 2;
-}
-
-function updateCircRing(ti) {
-  const el = circEls[ti];
-  if (!el) return;
-  const tr = state.tracks[ti];
-  const r  = ringR(ti);
-  const c  = 2 * Math.PI * r;
-
-  // Arc length = active track length
-  const dash = (tr.length / S) * c;
-  el.arc.setAttribute('stroke-dasharray', `${dash.toFixed(2)} ${(c - dash).toFixed(2)}`);
-
-  // Step dots
-  for (let si = 0; si < S; si++) {
-    const st = tr.steps[si];
-    let fill;
-    if (si >= tr.length)    fill = 'rgba(26,26,26,0.03)';
-    else if (st.skip)       fill = 'rgba(192,57,43,0.65)';
-    else if (st.active)     fill = 'rgba(26,26,26,0.72)';
-    else                    fill = 'rgba(26,26,26,0.08)';
-    el.dots[si].setAttribute('fill', fill);
-  }
-
-  updatePlayheadDot(ti);
-}
-
-function updatePlayheadDot(ti) {
-  const el = circEls[ti];
-  if (!el) return;
-  const tr  = state.tracks[ti];
-  const r   = ringR(ti);
-  const pos = tr.playheadPos;
-  const a   = stepAngle(pos / tr.length * S, S);
-  el.playhead.setAttribute('cx', (CX + Math.cos(a) * r).toFixed(2));
-  el.playhead.setAttribute('cy', (CY + Math.sin(a) * r).toFixed(2));
-}
-
-// ══════════════════════════════════════════════════════════════
-// Context panel
-// ══════════════════════════════════════════════════════════════
-const DIR_NAMES = { 1:'fwd', 2:'rev', 3:'png', 4:'brn', 5:'rnd' };
-
-function updateCtx() {
-  const ti = state.selectedTrack;
-  const si = state.selectedStep;
-  const tr = state.tracks[ti];
-
-  // Step attrs
-  const stepDiv = document.getElementById('ctx-step');
-  if (si >= 0 && si < S) {
-    const st = tr.steps[si];
-    stepDiv.innerHTML =
-      attrHTML('pit', st.pitOffset) + attrHTML('vel', st.velOffset) +
-      attrHTML('len', st.len)       + attrHTML('sta', st.sta) +
-      attrHTML('prob', st.amt + '%');
-  } else {
-    stepDiv.innerHTML = '<span style="font-size:9px;color:var(--muted)">select a step</span>';
-  }
-
-  // Track attrs
-  document.getElementById('ctx-track').innerHTML =
-    attrHTML('spd', tr.speed)                  +
-    attrHTML('dir', DIR_NAMES[tr.direction] || 'fwd') +
-    attrHTML('len', tr.length)                 +
-    attrHTML('grv', tr.grv)                    +
-    attrHTML('ch',  tr.mch);
-}
-
-function attrHTML(label, value) {
-  return `<div class="attr-item">
-    <div class="attr-label">${label}</div>
-    <div class="attr-value">${value}</div>
-  </div>`;
-}
-
-// ══════════════════════════════════════════════════════════════
-// Transport
-// ══════════════════════════════════════════════════════════════
-document.getElementById('btn-play').addEventListener('click', () => {
-  state.playing = !state.playing;
-  document.getElementById('btn-play').classList.toggle('on', state.playing);
-  maxAPI.send('transport', state.playing ? 1 : 0);
-});
-document.getElementById('btn-stop').addEventListener('click', () => {
-  state.playing = false;
-  document.getElementById('btn-play').classList.remove('on');
-  maxAPI.send('transport', 0);
-});
-document.getElementById('btn-reset').addEventListener('click', () => maxAPI.send('reset_phase'));
-
-// ══════════════════════════════════════════════════════════════
+// ──────────────────────────────────────────────────────────────
 // Page dots
-// ══════════════════════════════════════════════════════════════
+// ──────────────────────────────────────────────────────────────
 (function buildPageDots() {
   const c = document.getElementById('page-dots');
   for (let p = 0; p < 8; p++) {
-    const d = Object.assign(document.createElement('div'),
-      { className: 'page-dot' + (p === 0 ? ' active' : ''), title: `Page ${p + 1}` });
+    const d = document.createElement('div');
+    d.className = 'page-dot' + (p === 0 ? ' active' : '');
+    d.title = `Page ${p + 1}`;
     d.addEventListener('click', () => {
       document.querySelectorAll('.page-dot').forEach(x => x.classList.remove('active'));
       d.classList.add('active');
@@ -646,22 +423,367 @@ document.getElementById('btn-reset').addEventListener('click', () => maxAPI.send
   }
 })();
 
-// ══════════════════════════════════════════════════════════════
-// Mutator buttons
-// ══════════════════════════════════════════════════════════════
-document.querySelectorAll('.mut-btn').forEach(btn => {
-  btn.addEventListener('click', () => maxAPI.send(btn.dataset.msg, state.selectedTrack));
-});
+// ──────────────────────────────────────────────────────────────
+// Step matrix
+// ──────────────────────────────────────────────────────────────
+const stepEls = [];  // [ti][si] → element
+let painting = null;
 
-// ══════════════════════════════════════════════════════════════
-// Max → HTML  (called via [script <fn> args] from jweb in Max)
-// ══════════════════════════════════════════════════════════════
+function buildMatrix() {
+  const matrix = document.getElementById('step-matrix');
+  matrix.innerHTML = '';
 
-// [script updateStep ti si active skip hasChord]
+  // Rows: track 9 at top → track 0 at bottom (hardware order)
+  for (let row = 0; row < T; row++) {
+    const ti = T - 1 - row;  // track index
+
+    // Track number
+    const numEl = document.createElement('div');
+    numEl.className = 't-num';
+    numEl.textContent = ti;
+    matrix.appendChild(numEl);
+
+    // Track LED
+    const ledEl = document.createElement('div');
+    ledEl.className = 't-led';
+    ledEl.id = `tled-${ti}`;
+    matrix.appendChild(ledEl);
+
+    // 16 step cells, with beat-group spacers after every 4
+    stepEls[ti] = [];
+    for (let si = 0; si < S; si++) {
+      const cell = document.createElement('div');
+      cell.className = 'step-cell';
+      cell.dataset.ti = ti;
+      cell.dataset.si = si;
+      cell.addEventListener('mousedown', e => { e.preventDefault(); onStepDown(ti, si, e.shiftKey); });
+      cell.addEventListener('mouseenter', () => onStepPaint(ti, si));
+      stepEls[ti][si] = cell;
+      matrix.appendChild(cell);
+
+      // Beat-group spacer after steps 3, 7, 11 (not after 15)
+      if ((si + 1) % 4 === 0 && si < 15) {
+        const spacer = document.createElement('div');
+        spacer.className = 'beat-gap';
+        matrix.appendChild(spacer);
+      }
+    }
+
+    // Attr label — hardware order: row 0 = track 9 = VEL, row 9 = track 0 = MCH
+    const attrEl = document.createElement('div');
+    attrEl.className = 't-attr' + (ATTR_LABELS[row].toLowerCase() === state.selectedAttr ? ' active' : '');
+    attrEl.textContent = ATTR_LABELS[row];
+    attrEl.dataset.attr = ATTR_LABELS[row].toLowerCase();
+    attrEl.addEventListener('click', () => selectAttr(attrEl.dataset.attr));
+    matrix.appendChild(attrEl);
+  }
+
+  document.addEventListener('mouseup', () => { painting = null; });
+}
+
+function onStepDown(ti, si, shift) {
+  if (shift) {
+    state.tracks[ti].steps[si].skip ^= true;
+    maxAPI.send('step_skip_toggle', ti, si);
+  } else {
+    const next = !state.tracks[ti].steps[si].active;
+    state.tracks[ti].steps[si].active = next;
+    painting = { value: next };
+    maxAPI.send('step_toggle', ti, si);
+  }
+  state.selectedTrack = ti;
+  state.selectedStep  = si;
+  renderGrid();
+  updateCircRing(ti);
+}
+
+function onStepPaint(ti, si) {
+  if (!painting) return;
+  if (state.tracks[ti].steps[si].active !== painting.value) {
+    state.tracks[ti].steps[si].active = painting.value;
+    renderStep(ti, si);
+    maxAPI.send('step_toggle', ti, si);
+    updateCircRing(ti);
+  }
+}
+
+function selectAttr(attr) {
+  state.selectedAttr = attr;
+  document.querySelectorAll('.t-attr').forEach(el =>
+    el.classList.toggle('active', el.dataset.attr === attr));
+  maxAPI.send('set_attr', attr);
+}
+
+function renderStep(ti, si) {
+  const el = stepEls[ti]?.[si];
+  if (!el) return;
+  const tr = state.tracks[ti];
+  const st = tr.steps[si];
+
+  let cls = 'step-cell';
+  if (si >= tr.length)             cls += ' inactive';
+  else if (st.skip)                cls += ' skip';
+  else if (st.hasChord && st.active) cls += ' chord on';
+  else if (st.active)              cls += ' on';
+  if (tr.muted && st.active)       cls += ' muted';
+  if (ti === state.selectedTrack && si === state.selectedStep) cls += ' sel';
+
+  el.className = cls;
+}
+
+function renderGrid() {
+  for (let ti = 0; ti < T; ti++)
+    for (let si = 0; si < S; si++)
+      renderStep(ti, si);
+}
+
+// ──────────────────────────────────────────────────────────────
+// Circular sequencer SVG
+// ──────────────────────────────────────────────────────────────
+const NS  = 'http://www.w3.org/2000/svg';
+const CX  = 155, CY = 155;   // centre of SVG (viewBox 310×310)
+const R0  = 140;              // outermost ring
+const R1  = 26;               // innermost ring
+const R_NOTE = 149;           // note label radius
+
+const circEls = [];
+
+function ringR(ti) {
+  return R0 - ti * (R0 - R1) / (T - 1);
+}
+function angle(frac) {
+  return frac * 2 * Math.PI - Math.PI / 2;
+}
+function mkEl(tag, attrs) {
+  const el = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  return el;
+}
+function pt(r, frac) {
+  const a = angle(frac);
+  return { x: CX + Math.cos(a) * r, y: CY + Math.sin(a) * r };
+}
+
+function buildCirc() {
+  const svg = document.getElementById('circ-svg');
+  svg.innerHTML = '';
+
+  // ── Note labels (12, chromatic, outermost) ──
+  for (let ni = 0; ni < 12; ni++) {
+    const p = pt(R_NOTE, ni / 12);
+    const t = mkEl('text', {
+      x: p.x.toFixed(1), y: p.y.toFixed(1),
+      'text-anchor': 'middle',
+      'dominant-baseline': 'central',
+      'font-size': '6.5',
+      'font-family': '-apple-system,Helvetica Neue,sans-serif',
+      fill: NOTE_NAMES[ni].includes('#')
+        ? 'rgba(28,26,20,0.55)'
+        : 'rgba(28,26,20,0.42)',
+      'font-weight': NOTE_NAMES[ni].includes('#') ? '600' : '400',
+    });
+    t.textContent = NOTE_NAMES[ni];
+    svg.appendChild(t);
+  }
+
+  // ── Track rings (outer→inner, so inner draws on top) ──
+  for (let ti = T - 1; ti >= 0; ti--) {
+    const r = ringR(ti);
+
+    // Subtle background ring
+    svg.appendChild(mkEl('circle', {
+      cx: CX, cy: CY, r,
+      fill: 'none',
+      stroke: 'rgba(28,26,20,0.06)',
+      'stroke-width': '1',
+    }));
+
+    // Step-slot dots
+    const dots = [];
+    for (let si = 0; si < S; si++) {
+      const p = pt(r, si / S);
+      const dot = mkEl('circle', {
+        cx: p.x.toFixed(2), cy: p.y.toFixed(2),
+        r: '2', fill: 'rgba(28,26,20,0.07)',
+      });
+      svg.appendChild(dot);
+      dots.push(dot);
+    }
+
+    // Active-length arc (dash trick, starts at top)
+    const arc = mkEl('circle', {
+      cx: CX, cy: CY, r,
+      fill: 'none',
+      stroke: 'rgba(28,26,20,0.30)',
+      'stroke-width': '2.2',
+      'stroke-linecap': 'round',
+      transform: `rotate(-90,${CX},${CY})`,
+    });
+    svg.appendChild(arc);
+
+    // Track-number label near top of ring
+    const numAngle = -Math.PI / 2 - 0.18;
+    const np = {
+      x: CX + Math.cos(numAngle) * r,
+      y: CY + Math.sin(numAngle) * r,
+    };
+    const numLabel = mkEl('text', {
+      x: np.x.toFixed(1), y: np.y.toFixed(1),
+      'text-anchor': 'middle', 'dominant-baseline': 'central',
+      'font-size': '5',
+      'font-family': '-apple-system,Helvetica Neue,sans-serif',
+      fill: 'rgba(28,26,20,0.35)',
+    });
+    numLabel.textContent = ti;
+    svg.appendChild(numLabel);
+
+    // Playhead dot
+    const ph = mkEl('circle', { r: '3.8', fill: 'rgba(216,40,40,0.88)' });
+    svg.appendChild(ph);
+
+    circEls[ti] = { arc, dots, playhead: ph };
+    updateCircRing(ti);
+  }
+
+  // Centre point
+  svg.appendChild(mkEl('circle', {
+    cx: CX, cy: CY, r: '3',
+    fill: 'rgba(28,26,20,0.18)',
+  }));
+}
+
+function updateCircRing(ti) {
+  const el = circEls[ti];
+  if (!el) return;
+  const tr = state.tracks[ti];
+  const r  = ringR(ti);
+  const c  = 2 * Math.PI * r;
+
+  // Dash = active length proportion
+  const dash = (tr.length / S) * c;
+  el.arc.setAttribute('stroke-dasharray', `${dash.toFixed(2)} ${(c - dash + 0.01).toFixed(2)}`);
+
+  // Step-slot dots
+  for (let si = 0; si < S; si++) {
+    const st = tr.steps[si];
+    let fill;
+    if (si >= tr.length)            fill = 'rgba(28,26,20,0.03)';
+    else if (st.skip)               fill = 'rgba(216,40,40,0.60)';
+    else if (st.hasChord && st.active) fill = 'rgba(216,144,40,0.75)';
+    else if (st.active)             fill = 'rgba(28,26,20,0.68)';
+    else                            fill = 'rgba(28,26,20,0.10)';
+    el.dots[si].setAttribute('fill', fill);
+  }
+
+  _placePlayhead(ti);
+}
+
+function _placePlayhead(ti) {
+  const el = circEls[ti];
+  if (!el) return;
+  const tr = state.tracks[ti];
+  const r  = ringR(ti);
+  const p  = pt(r, tr.playheadPos / tr.length);
+  el.playhead.setAttribute('cx', p.x.toFixed(2));
+  el.playhead.setAttribute('cy', p.y.toFixed(2));
+}
+
+// ──────────────────────────────────────────────────────────────
+// Mode buttons
+// ──────────────────────────────────────────────────────────────
+function buildMode() {
+  const grid = document.getElementById('mode-grid');
+  MODES.forEach(m => {
+    const isActive = m.id === state.currentMode;
+    const btn = document.createElement('div');
+    btn.className = 'mode-btn' + (isActive ? ' active' : '');
+    btn.dataset.mode = m.id;
+    btn.innerHTML =
+      `<div class="m-led${isActive ? ' on' : ''}"></div>` +
+      `<span class="mode-btn-label">${m.label}</span>`;
+    btn.addEventListener('click', () => setMode(m.id));
+    grid.appendChild(btn);
+  });
+}
+
+function setMode(id) {
+  state.currentMode = id;
+  document.querySelectorAll('.mode-btn').forEach(el => {
+    const on = el.dataset.mode === id;
+    el.classList.toggle('active', on);
+    el.querySelector('.m-led').className = 'm-led' + (on ? ' on' : '');
+  });
+  maxAPI.send('set_mode', id);
+}
+
+// ──────────────────────────────────────────────────────────────
+// Scale buttons
+// ──────────────────────────────────────────────────────────────
+function buildScale() {
+  const row = document.getElementById('scale-btns');
+  SCALE_BTNS.forEach(s => {
+    const btn = document.createElement('div');
+    btn.className = 'mode-btn' + (s.on ? ' active' : '');
+    btn.innerHTML =
+      `<div class="m-led${s.on ? ' on' : ''}"></div>` +
+      `<span class="mode-btn-label">${s.label}</span>`;
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#scale-btns .mode-btn').forEach(el => {
+        el.classList.remove('active');
+        el.querySelector('.m-led').className = 'm-led';
+      });
+      btn.classList.add('active');
+      btn.querySelector('.m-led').className = 'm-led on';
+      maxAPI.send('scale_mode', s.id);
+    });
+    row.appendChild(btn);
+  });
+}
+
+// ──────────────────────────────────────────────────────────────
+// Transport buttons
+// ──────────────────────────────────────────────────────────────
+function buildTransport() {
+  const row = document.getElementById('transport-btns');
+  TRANSPORT.forEach(tp => {
+    const btn = document.createElement('div');
+    btn.className = 'tp-btn' + (tp.on ? ' on' : '') + (tp.led ? ` ${tp.led}` : '');
+    btn.title = tp.id;
+    btn.textContent = tp.sym;
+    btn.addEventListener('click', () => onTransport(tp.id, btn));
+    row.appendChild(btn);
+  });
+}
+
+function onTransport(id, btn) {
+  if (id === 'play') {
+    state.playing = !state.playing;
+    btn.classList.toggle('on', state.playing);
+    btn.className = btn.className.replace(/\b(lg|lw)\b/g, '').trim();
+    if (state.playing) btn.classList.add('lg');
+    maxAPI.send('transport', state.playing ? 1 : 0);
+  } else if (id === 'stop') {
+    state.playing = false;
+    document.querySelector('.tp-btn[title="play"]')
+      ?.classList.remove('on', 'lg');
+    maxAPI.send('transport', 0);
+  } else if (id === 'back' || id === 'cancel') {
+    maxAPI.send('reset_phase');
+  } else if (id === 'rec') {
+    btn.classList.toggle('lr');
+    btn.classList.toggle('on');
+  } else if (id === 'pause') {
+    state.playing = false;
+    maxAPI.send('transport', 0);
+  }
+}
+
+// ──────────────────────────────────────────────────────────────
+// Max → HTML public API  (called via [script fn args] in jweb)
+// ──────────────────────────────────────────────────────────────
 window.updateStep = function(ti, si, active, skip, hasChord) {
   ti = +ti; si = +si;
-  if (isNaN(ti) || ti < 0 || ti >= T) return;
-  if (isNaN(si) || si < 0 || si >= S) return;
+  if (ti < 0 || ti >= T || si < 0 || si >= S) return;
   const st = state.tracks[ti].steps[si];
   st.active   = !!+active;
   st.skip     = !!+skip;
@@ -670,45 +792,41 @@ window.updateStep = function(ti, si, active, skip, hasChord) {
   updateCircRing(ti);
 };
 
-// [script updatePlayhead ti pos]
 window.updatePlayhead = function(ti, pos) {
   ti = +ti; pos = +pos;
-  if (isNaN(ti) || ti < 0 || ti >= T) return;
-  const tr = state.tracks[ti];
-  tr.playheadPos = pos;
-  updatePlayheadDot(ti);
+  if (ti < 0 || ti >= T) return;
+  state.tracks[ti].playheadPos = pos;
+  _placePlayhead(ti);
 
-  // Flash active step cell
+  // Flash active step
   const si = Math.floor(pos) % S;
   const el = stepEls[ti]?.[si];
-  if (el && tr.steps[si]?.active) {
+  if (el && state.tracks[ti].steps[si]?.active) {
     el.classList.remove('flash');
-    requestAnimationFrame(() => el.classList.add('flash'));
+    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('flash')));
   }
-
-  // Pulse track indicator
-  const ind = document.getElementById(`ind-${ti}`);
-  if (ind) {
-    ind.classList.add('live');
-    clearTimeout(ind._t);
-    ind._t = setTimeout(() => ind.classList.remove('live'), 80);
+  const led = document.getElementById(`tled-${ti}`);
+  if (led) {
+    led.classList.add('lit');
+    clearTimeout(led._t);
+    led._t = setTimeout(() => led.classList.remove('lit'), 70);
   }
 };
 
-// [script setTempo bpm]
 window.setTempo = function(bpm) {
-  state.tempo = Math.round(+bpm);
-  const el = document.getElementById('tempo-val');
-  if (el) el.textContent = state.tempo;
+  state.tempo = Math.round(+bpm || 120);
 };
 
-// [script setTransport running]
 window.setTransport = function(running) {
   state.playing = !!+running;
-  document.getElementById('btn-play').classList.toggle('on', state.playing);
+  const btn = document.querySelector('.tp-btn[title="play"]');
+  if (btn) {
+    btn.classList.toggle('on', state.playing);
+    btn.className = btn.className.replace(/\blg\b/g, '').trim();
+    if (state.playing) btn.classList.add('lg');
+  }
 };
 
-// [script loadPage jsonString]  — bulk state update from Max Dict
 window.loadPage = function(json) {
   try {
     const page = JSON.parse(String(json));
@@ -716,81 +834,83 @@ window.loadPage = function(json) {
     page.tracks.forEach((t, ti) => {
       if (ti >= T) return;
       const tr = state.tracks[ti];
-      tr.length    = t.len       || 16;
-      tr.direction = t.dir       || 1;
-      tr.muted     = !!t.muted;
-      tr.vel       = t.vel       || 100;
-      tr.mch       = t.mch       || 1;
-      tr.grv       = t.grv       || 0;
-      tr.speed     = parseFloat(t.multiplier) || 1;
-      if (t.steps) {
-        t.steps.forEach((s, si) => {
-          if (si >= S) return;
-          const st = tr.steps[si];
-          st.active    = !!s.active;
-          st.skip      = !!s.skip;
-          st.hasChord  = (s.chords?.length || 0) > 0;
-          st.pitOffset = s.pit_offset || 0;
-          st.velOffset = s.vel_offset || 0;
-          st.len       = s.len        || 12;
-          st.sta       = s.sta_offset || 0;
-          st.amt       = s.amt        || 100;
-        });
-      }
+      if (t.len !== undefined)        tr.length    = t.len;
+      if (t.dir !== undefined)        tr.direction = t.dir;
+      if (t.muted !== undefined)      tr.muted     = !!t.muted;
+      if (t.vel !== undefined)        tr.vel       = t.vel;
+      if (t.mch !== undefined)        tr.mch       = t.mch;
+      if (t.grv !== undefined)        tr.grv       = t.grv;
+      if (t.multiplier !== undefined) tr.speed     = parseFloat(t.multiplier) || 1;
+      if (t.steps) t.steps.forEach((s, si) => {
+        if (si >= S) return;
+        const st = tr.steps[si];
+        if (s.active     !== undefined) st.active    = !!s.active;
+        if (s.skip       !== undefined) st.skip      = !!s.skip;
+        if (s.chords     !== undefined) st.hasChord  = (s.chords?.length || 0) > 0;
+        if (s.pit_offset !== undefined) st.pitOffset = s.pit_offset;
+        if (s.vel_offset !== undefined) st.velOffset = s.vel_offset;
+        if (s.len        !== undefined) st.len       = s.len;
+        if (s.sta_offset !== undefined) st.sta       = s.sta_offset;
+        if (s.amt        !== undefined) st.amt       = s.amt;
+      });
     });
     renderGrid();
     buildCirc();
-    updateCtx();
-  } catch (e) { /* silent — Max may send partial updates */ }
+  } catch (_) { /* silent */ }
 };
 
-// ══════════════════════════════════════════════════════════════
-// Standalone demo animation (skipped when running inside jweb)
-// ══════════════════════════════════════════════════════════════
+// ──────────────────────────────────────────────────────────────
+// Standalone demo animation
+// ──────────────────────────────────────────────────────────────
 if (typeof window.max === 'undefined') {
-  const MS = (60000 / state.tempo) / 4;  // ms per 1/16 note
-  const ticks = new Array(T).fill(0);
-  let lastT = performance.now();
-  let accum = 0;
+  const ticks  = new Array(T).fill(0);
+  let lastTime = performance.now();
+  let accum    = 0;
 
-  function demoFrame(now) {
-    accum += now - lastT;
-    lastT  = now;
-    while (accum >= MS) {
-      accum -= MS;
+  (function loop(now) {
+    const ms = (60000 / state.tempo) / 4;  // ms per 1/16 step
+    accum += now - lastTime;
+    lastTime = now;
+    while (accum >= ms) {
+      accum -= ms;
+      if (!state.playing) break;
       for (let ti = 0; ti < T; ti++) {
+        const tr = state.tracks[ti];
         ticks[ti]++;
-        const len = state.tracks[ti].length;
-        const pos = ticks[ti] % len;
-        state.tracks[ti].playheadPos = pos;
-        updatePlayheadDot(ti);
+        const pos = ticks[ti] % tr.length;
+        tr.playheadPos = pos;
+        _placePlayhead(ti);
 
-        const si  = pos % S;
-        const el  = stepEls[ti]?.[si];
-        if (el && state.tracks[ti].steps[si].active) {
+        // Flash step cell
+        const si = pos % S;
+        const el = stepEls[ti]?.[si];
+        if (el && tr.steps[si]?.active) {
           el.classList.remove('flash');
-          requestAnimationFrame(() => el.classList.add('flash'));
+          requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('flash')));
         }
-        const ind = document.getElementById(`ind-${ti}`);
-        if (ind) {
-          ind.classList.add('live');
-          clearTimeout(ind._t);
-          ind._t = setTimeout(() => ind.classList.remove('live'), 80);
+
+        // Pulse track LED
+        const led = document.getElementById(`tled-${ti}`);
+        if (led) {
+          led.classList.add('lit');
+          clearTimeout(led._t);
+          led._t = setTimeout(() => led.classList.remove('lit'), 70);
         }
       }
     }
-    requestAnimationFrame(demoFrame);
-  }
-  requestAnimationFrame(demoFrame);
+    requestAnimationFrame(loop);
+  })(performance.now());
 }
 
-// ══════════════════════════════════════════════════════════════
+// ──────────────────────────────────────────────────────────────
 // Init
-// ══════════════════════════════════════════════════════════════
-buildGrid();
+// ──────────────────────────────────────────────────────────────
+buildMatrix();
 buildCirc();
+buildMode();
+buildScale();
+buildTransport();
 renderGrid();
-updateCtx();
 </script>
 </body>
 </html>
