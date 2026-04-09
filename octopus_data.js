@@ -88,9 +88,7 @@ function defaultStep() {
 function defaultTrack(trackIndex) {
   // Manual default PIT values for tracks 9..0:
   // C3, D3, E3, G3, A3, C5, D5, E5, G5, A5
-  // Track indices in this spec are 0..9; we store same ordering as Octopus rows (0 bottom, 9 top).
-  var pitsByIndex = [69, 67, 64, 62, 60, 57, 55, 52, 50, 48]; // A5,G5,E5,D5,C5,A3,G3,E3,D3,C3? (reverse)
-  // Above mapping is easy to get wrong; store explicit map from manual list.
+  // Track indices in this spec are 0..9 and map to the above list in order.
   var manual = [57, 55, 52, 50, 48, 60, 62, 64, 67, 69]; // index 0..9 = [C3,D3,E3,G3,A3,C5,D5,E5,G5,A5]
 
   return {

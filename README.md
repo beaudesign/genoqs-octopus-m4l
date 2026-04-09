@@ -5,7 +5,7 @@ Max for Live MIDI effect device project for building **`Octopus.amxd`**.
 ## Quick start in Ableton
 
 1. Keep **all** `.js` files in the **same folder** as `Octopus.amxd` (Max resolves `octopus_*.js` next to the device).
-2. Drag `**Octopus.amxd`** onto a MIDI track (or use Places → your project folder).
+2. Drag **`Octopus.amxd`** onto a MIDI track (or use Places → your project folder).
 3. If you change `octopus_ui_main.maxpat`, rebuild the device (below) or open the `.amxd` in Max and **Save**.
 
 ## Rebuild `Octopus.amxd` from the template
