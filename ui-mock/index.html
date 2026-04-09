@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Octopus</title>
+  <style>
+    :root {
+      --bg:         #f4f3ef;
+      --surface:    #fafaf8;
+      --border:     rgba(26,26,26,0.08);
+      --text:       #1a1a1a;
+      --muted:      rgba(26,26,26,0.38);
+      --accent:     #2d62c8;
+      --step-ring:  rgba(26,26,26,0.14);
+      --step-on:    #1a1a1a;
+      --step-skip:  #c0392b;
+      --step-chord: #b8620a;
+      --playhead:   #c0392b;
+      --font:       -apple-system, "Helvetica Neue", system-ui, sans-serif;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 11px;
+      -webkit-font-smoothing: antialiased;
+      user-select: none;
+    }
+
+    /* ── Layout ─────────────────────────────────── */
+    .app { display: flex; flex-direction: column; height: 100%; }
+
+    /* ── Header ──────────────────────────────────── */
+    .header {
+      flex-shrink: 0;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .transport { display: flex; gap: 4px; }
+    .btn {
+      width: 26px; height: 26px;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      background: transparent;
+      color: var(--text);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      padding: 0;
+      transition: background 0.1s;
+    }
+    .btn:hover { background: var(--bg); }
+    .btn.on { background: var(--text); color: var(--surface); border-color: var(--text); }
+    .tempo {
+      display: flex; align-items: baseline; gap: 3px;
+    }
+    .tempo-label { color: var(--muted); font-size: 9px; letter-spacing: 0.1em; }
+    .tempo-value { font-size: 13px; font-weight: 500; min-width: 36px; }
+    .spacer { flex: 1; }
+    .device-name {
+      font-size: 9px; letter-spacing: 0.22em; text-transform: lowercase; color: var(--muted);
+    }
+    .page-dots { display: flex; gap: 5px; align-items: center; }
+    .page-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      border: 1.5px solid var(--muted);
+      cursor: pointer;
+      transition: background 0.1s, border-color 0.1s;
+    }
+    .page-dot.active { background: var(--text); border-color: var(--text); }
+
+    /* ── Workspace ───────────────────────────────── */
+    .workspace { flex: 1; min-height: 0; display: flex; }
+
+    /* ── Step Grid ───────────────────────────────── */
+    .grid-panel {
+      flex: 1; min-width: 0;
+      display: flex; flex-direction: column;
+      padding: 10px 8px 10px 14px;
+    }
+    .grid-header-row {
+      display: flex; align-items: center;
+      padding-left: 26px;
+      margin-bottom: 4px;
+      flex-shrink: 0;
+    }
+    .beat-group {
+      flex: 4; display: flex; gap: 3px;
+    }
+    .beat-num {
+      flex: 1; text-align: center; font-size: 8px; color: var(--muted);
+    }
+    .beat-gap { flex-shrink: 0; width: 6px; }
+
+    .grid-body {
+      flex: 1; min-height: 0;
+      display: flex; flex-direction: column; gap: 3px;
+    }
+    .track-row {
+      display: flex; align-items: center; gap: 4px;
+      flex: 1; min-height: 0;
+    }
+    .track-num {
+      flex-shrink: 0; width: 14px; text-align: right;
+      font-size: 8px; color: var(--muted);
+    }
+    .track-indicator {
+      flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%;
+      background: transparent; transition: background 0.08s;
+    }
+    .track-indicator.live { background: var(--playhead); }
+    .track-steps {
+      flex: 1; display: flex; gap: 6px; min-width: 0;
+    }
+    .step-group { flex: 4; display: flex; gap: 3px; }
+    .step-cell {
+      flex: 1; border-radius: 50%;
+      border: 1.5px solid var(--step-ring);
+      background: transparent;
+      cursor: pointer;
+      aspect-ratio: 1;
+      min-width: 0; min-height: 0;
+      transition: background 60ms, border-color 60ms, opacity 60ms;
+    }
+    .step-cell.on    { background: var(--step-on);    border-color: var(--step-on); }
+    .step-cell.skip  { background: var(--step-skip);  border-color: var(--step-skip); }
+    .step-cell.chord { background: var(--step-chord); border-color: var(--step-chord); }
+    .step-cell.selected {
+      outline: 2px solid var(--accent); outline-offset: 1px;
+    }
+    .step-cell.inactive { opacity: 0.12; }
+    .step-cell.muted    { opacity: 0.22; }
+
+    @keyframes ph-flash {
+      0%   { box-shadow: 0 0 0 0   rgba(192,57,43,0.65); }
+      100% { box-shadow: 0 0 0 5px rgba(192,57,43,0);    }
+    }
+    .step-cell.flash { animation: ph-flash 0.2s ease-out forwards; }
+
+    /* ── Circular Sequencer ──────────────────────── */
+    .circ-panel {
+      flex-shrink: 0; width: 256px;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 6px;
+      border-left: 1px solid var(--border); padding: 10px;
+    }
+    .circ-label {
+      font-size: 8px; letter-spacing: 0.15em;
+      color: var(--muted); text-transform: lowercase;
+    }
+    #circ-svg { width: 100%; max-width: 220px; max-height: 220px; }
+
+    /* ── Context Panel ───────────────────────────── */
+    .context-panel {
+      flex-shrink: 0; height: 108px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+    }
+    .ctx-col {
+      flex: 1; min-width: 0;
+      padding: 9px 14px;
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .ctx-col:last-child { border-right: none; }
+    .ctx-col-title {
+      font-size: 8px; letter-spacing: 0.15em;
+      color: var(--muted); text-transform: lowercase; flex-shrink: 0;
+    }
+    .ctx-attrs { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+    .attr-item { display: flex; flex-direction: column; gap: 2px; }
+    .attr-label { font-size: 7px; letter-spacing: 0.12em; color: var(--muted); text-transform: lowercase; }
+    .attr-value { font-size: 12px; font-weight: 500; }
+
+    .mut-row { display: flex; gap: 4px; flex-wrap: wrap; }
+    .mut-btn {
+      padding: 3px 8px;
+      border: 1px solid var(--border); border-radius: 4px;
+      background: transparent; cursor: pointer;
+      font-size: 8px; letter-spacing: 0.08em; color: var(--muted);
+    }
+    .mut-btn:hover { color: var(--text); border-color: rgba(26,26,26,0.22); }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- HEADER ──────────────────────────────────── -->
+  <header class="header">
+    <div class="transport">
+      <button class="btn" id="btn-stop" title="Stop">
+        <svg width="8" height="8" viewBox="0 0 8 8">
+          <rect x="0.5" y="0.5" width="7" height="7" fill="currentColor" rx="0.5"/>
+        </svg>
+      </button>
+      <button class="btn on" id="btn-play" title="Play">
+        <svg width="8" height="10" viewBox="0 0 8 10">
+          <polygon points="0.5,0.5 7.5,5 0.5,9.5" fill="currentColor"/>
+        </svg>
+      </button>
+      <button class="btn" id="btn-reset" title="Reset phase">
+        <svg width="12" height="10" viewBox="0 0 12 10">
+          <path d="M11 5A5 5 0 1 1 6 0.5" stroke="currentColor" stroke-width="1.4"
+                fill="none" stroke-linecap="round"/>
+          <polygon points="6,0.5 10,0 10,3" fill="currentColor"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="tempo">
+      <span class="tempo-label">bpm</span>
+      <span class="tempo-value" id="tempo-val">120</span>
+    </div>
+
+    <div class="spacer"></div>
+    <span class="device-name">octopus</span>
+    <div class="spacer"></div>
+
+    <div class="page-dots" id="page-dots"></div>
+  </header>
+
+  <!-- WORKSPACE ───────────────────────────────── -->
+  <div class="workspace">
+
+    <!-- Step grid -->
+    <div class="grid-panel">
+      <div class="grid-header-row" id="grid-hdr"></div>
+      <div class="grid-body"       id="grid-body"></div>
+    </div>
+
+    <!-- Circular sequencer -->
+    <div class="circ-panel">
+      <span class="circ-label">time · phase</span>
+      <svg id="circ-svg" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+
+  </div>
+
+  <!-- CONTEXT PANEL ───────────────────────────── -->
+  <div class="context-panel">
+    <div class="ctx-col">
+      <div class="ctx-col-title">step</div>
+      <div class="ctx-attrs" id="ctx-step">
+        <span style="font-size:9px;color:var(--muted)">select a step</span>
+      </div>
+    </div>
+    <div class="ctx-col">
+      <div class="ctx-col-title">track</div>
+      <div class="ctx-attrs" id="ctx-track">
+        <span style="font-size:9px;color:var(--muted)">–</span>
+      </div>
+    </div>
+    <div class="ctx-col" style="flex:0.65;flex-shrink:0">
+      <div class="ctx-col-title">mutators</div>
+      <div class="mut-row">
+        <button class="mut-btn" data-msg="randomize">rnd</button>
+        <button class="mut-btn" data-msg="clear">clr</button>
+        <button class="mut-btn" data-msg="reverse">rev</button>
+        <button class="mut-btn" data-msg="rotate">rot</button>
+        <button class="mut-btn" data-msg="copy">copy</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- .app -->
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// Max bridge — safe in both standalone and jweb contexts
+// ══════════════════════════════════════════════════════════════
+const maxAPI = (() => {
+  if (typeof window.max !== 'undefined') {
+    return { send: (...a) => window.max.outlet(...a) };
+  }
+  return { send: (...a) => console.log('[→ Max]', ...a) };
+})();
+
+// ══════════════════════════════════════════════════════════════
+// Constants
+// ══════════════════════════════════════════════════════════════
+const T = 10;   // tracks
+const S = 16;   // steps
+
+// ══════════════════════════════════════════════════════════════
+// State
+// ══════════════════════════════════════════════════════════════
+const state = {
+  playing:       true,
+  tempo:         120,
+  activePage:    0,
+  activeBank:    0,
+  selectedTrack: 0,
+  selectedStep:  -1,
+  tracks: Array.from({ length: T }, () => ({
+    length:    16,
+    direction: 1,   // 1=fwd 2=rev 3=ping 4=brownian 5=random
+    speed:     1,
+    offset:    0,
+    muted:     false,
+    vel:       100,
+    mch:       1,
+    grv:       0,
+    playheadPos: 0,
+    steps: Array.from({ length: S }, () => ({
+      active:    false,
+      skip:      false,
+      hasChord:  false,
+      pitOffset: 0,
+      velOffset: 0,
+      len:       12,
+      sta:       0,
+      amt:       100,
+    }))
+  }))
+};
+
+// Demo seed — polyrhythmic pattern
+(function seed() {
+  const pats   = [
+    [0,4,8,12],[0,6,10],[0,2,4,8,10],[0,3,6,9,12],
+    [0,4,8,12],[0,7],[0,2,5,7,10],[0,3,6,9],[0,8],[0,4,8]
+  ];
+  const lens   = [16,15,14,13,16,12,7,11,16,9];
+  for (let ti = 0; ti < T; ti++) {
+    state.tracks[ti].length = lens[ti];
+    (pats[ti] || []).forEach(si => { state.tracks[ti].steps[si].active = true; });
+  }
+})();
+
+// ══════════════════════════════════════════════════════════════
+// DOM: build grid
+// ══════════════════════════════════════════════════════════════
+const stepEls = [];  // [ti][si] → element
+
+function buildGrid() {
+  // Beat-number header
+  const hdr = document.getElementById('grid-hdr');
+  hdr.innerHTML = '';
+  hdr.appendChild(Object.assign(document.createElement('div'),
+    { style: 'width:26px;flex-shrink:0' }));
+  for (let g = 0; g < 4; g++) {
+    const grp = document.createElement('div');
+    grp.className = 'beat-group';
+    for (let b = 0; b < 4; b++) {
+      const n = document.createElement('div');
+      n.className = 'beat-num';
+      n.textContent = b === 0 ? String(g * 4 + 1) : '';
+      grp.appendChild(n);
+    }
+    hdr.appendChild(grp);
+    if (g < 3) {
+      const gap = document.createElement('div');
+      gap.className = 'beat-gap';
+      hdr.appendChild(gap);
+    }
+  }
+
+  // Track rows
+  const body = document.getElementById('grid-body');
+  body.innerHTML = '';
+
+  for (let ti = 0; ti < T; ti++) {
+    const row = document.createElement('div');
+    row.className = 'track-row';
+
+    const num = Object.assign(document.createElement('div'),
+      { className: 'track-num', textContent: String(ti + 1) });
+    row.appendChild(num);
+
+    const ind = document.createElement('div');
+    ind.className = 'track-indicator';
+    ind.id = `ind-${ti}`;
+    row.appendChild(ind);
+
+    const stepsWrap = document.createElement('div');
+    stepsWrap.className = 'track-steps';
+    stepEls[ti] = [];
+
+    for (let g = 0; g < 4; g++) {
+      const grp = document.createElement('div');
+      grp.className = 'step-group';
+      for (let b = 0; b < 4; b++) {
+        const si = g * 4 + b;
+        const cell = document.createElement('div');
+        cell.className = 'step-cell';
+        cell.dataset.track = ti;
+        cell.dataset.step  = si;
+        stepEls[ti][si]    = cell;
+        cell.addEventListener('mousedown', e => {
+          e.preventDefault();
+          onStepDown(ti, si, e.shiftKey);
+        });
+        cell.addEventListener('mouseenter', () => onStepPaint(ti, si));
+        grp.appendChild(cell);
+      }
+      stepsWrap.appendChild(grp);
+    }
+    row.appendChild(stepsWrap);
+    body.appendChild(row);
+  }
+
+  document.addEventListener('mouseup', () => { painting = null; });
+}
+
+// ══════════════════════════════════════════════════════════════
+// Paint interaction
+// ══════════════════════════════════════════════════════════════
+let painting = null;
+
+function onStepDown(ti, si, shift) {
+  if (shift) {
+    state.tracks[ti].steps[si].skip ^= true;
+    maxAPI.send('step_skip_toggle', ti, si);
+    painting = { skipMode: true };
+  } else {
+    const next = !state.tracks[ti].steps[si].active;
+    state.tracks[ti].steps[si].active = next;
+    maxAPI.send('step_toggle', ti, si);
+    painting = { value: next, skipMode: false };
+  }
+  state.selectedTrack = ti;
+  state.selectedStep  = si;
+  renderStep(ti, si);
+  updateCircRing(ti);
+  updateCtx();
+}
+
+function onStepPaint(ti, si) {
+  if (!painting || painting.skipMode) return;
+  if (state.tracks[ti].steps[si].active !== painting.value) {
+    state.tracks[ti].steps[si].active = painting.value;
+    renderStep(ti, si);
+    maxAPI.send('step_toggle', ti, si);
+    updateCircRing(ti);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// Step rendering
+// ══════════════════════════════════════════════════════════════
+function renderStep(ti, si) {
+  const el = stepEls[ti]?.[si];
+  if (!el) return;
+  const tr = state.tracks[ti];
+  const st = tr.steps[si];
+
+  el.className = 'step-cell';
+  if (si >= tr.length)       el.classList.add('inactive');
+  else if (tr.muted)         { el.classList.add('muted'); if (st.active) el.classList.add('on'); }
+  else if (st.skip)          el.classList.add('skip');
+  else if (st.hasChord && st.active) el.classList.add('chord');
+  else if (st.active)        el.classList.add('on');
+
+  if (ti === state.selectedTrack && si === state.selectedStep)
+    el.classList.add('selected');
+}
+
+function renderGrid() {
+  for (let ti = 0; ti < T; ti++)
+    for (let si = 0; si < S; si++)
+      renderStep(ti, si);
+}
+
+// ══════════════════════════════════════════════════════════════
+// Circular sequencer — SVG
+// ══════════════════════════════════════════════════════════════
+const NS  = 'http://www.w3.org/2000/svg';
+const CX  = 110, CY = 110;
+const R0  = 104, R1 = 14;   // outer, inner ring radii
+
+const circEls = [];  // [ti] → { arc, dots[], playhead }
+
+function ringR(ti) {
+  return R0 - ti * ((R0 - R1) / (T - 1));
+}
+
+function buildCirc() {
+  const svg = document.getElementById('circ-svg');
+  svg.innerHTML = '';
+
+  // Draw from inside out so inner rings appear on top
+  for (let ti = T - 1; ti >= 0; ti--) {
+    const r = ringR(ti);
+
+    // Faint background ring
+    const bg = mkEl('circle', { cx: CX, cy: CY, r, fill: 'none',
+      stroke: 'rgba(26,26,26,0.06)', 'stroke-width': '1' });
+    svg.appendChild(bg);
+
+    // Step-position dots (one per step slot)
+    const dots = [];
+    for (let si = 0; si < S; si++) {
+      const a   = stepAngle(si, S);
+      const dot = mkEl('circle', {
+        cx: (CX + Math.cos(a) * r).toFixed(2),
+        cy: (CY + Math.sin(a) * r).toFixed(2),
+        r: '2', fill: 'rgba(26,26,26,0.08)'
+      });
+      svg.appendChild(dot);
+      dots.push(dot);
+    }
+
+    // Active-length arc
+    const arc = mkEl('circle', { cx: CX, cy: CY, r, fill: 'none',
+      stroke: 'rgba(26,26,26,0.30)', 'stroke-width': '2.5',
+      'stroke-linecap': 'round',
+      transform: `rotate(-90,${CX},${CY})` });
+    svg.appendChild(arc);
+
+    // Playhead dot
+    const ph = mkEl('circle', { r: '3.5', fill: 'rgba(192,57,43,0.9)' });
+    svg.appendChild(ph);
+
+    circEls[ti] = { arc, dots, playhead: ph };
+    updateCircRing(ti);
+  }
+
+  // Centre dot
+  svg.appendChild(mkEl('circle', { cx: CX, cy: CY, r: '2.5',
+    fill: 'rgba(26,26,26,0.15)' }));
+}
+
+function mkEl(tag, attrs) {
+  const el = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  return el;
+}
+
+function stepAngle(si, total) {
+  return (si / total) * Math.PI * 2 - Math.PI / 2;
+}
+
+function updateCircRing(ti) {
+  const el = circEls[ti];
+  if (!el) return;
+  const tr = state.tracks[ti];
+  const r  = ringR(ti);
+  const c  = 2 * Math.PI * r;
+
+  // Arc length = active track length
+  const dash = (tr.length / S) * c;
+  el.arc.setAttribute('stroke-dasharray', `${dash.toFixed(2)} ${(c - dash).toFixed(2)}`);
+
+  // Step dots
+  for (let si = 0; si < S; si++) {
+    const st = tr.steps[si];
+    let fill;
+    if (si >= tr.length)    fill = 'rgba(26,26,26,0.03)';
+    else if (st.skip)       fill = 'rgba(192,57,43,0.65)';
+    else if (st.active)     fill = 'rgba(26,26,26,0.72)';
+    else                    fill = 'rgba(26,26,26,0.08)';
+    el.dots[si].setAttribute('fill', fill);
+  }
+
+  updatePlayheadDot(ti);
+}
+
+function updatePlayheadDot(ti) {
+  const el = circEls[ti];
+  if (!el) return;
+  const tr  = state.tracks[ti];
+  const r   = ringR(ti);
+  const pos = tr.playheadPos;
+  const a   = stepAngle(pos / tr.length * S, S);
+  el.playhead.setAttribute('cx', (CX + Math.cos(a) * r).toFixed(2));
+  el.playhead.setAttribute('cy', (CY + Math.sin(a) * r).toFixed(2));
+}
+
+// ══════════════════════════════════════════════════════════════
+// Context panel
+// ══════════════════════════════════════════════════════════════
+const DIR_NAMES = { 1:'fwd', 2:'rev', 3:'png', 4:'brn', 5:'rnd' };
+
+function updateCtx() {
+  const ti = state.selectedTrack;
+  const si = state.selectedStep;
+  const tr = state.tracks[ti];
+
+  // Step attrs
+  const stepDiv = document.getElementById('ctx-step');
+  if (si >= 0 && si < S) {
+    const st = tr.steps[si];
+    stepDiv.innerHTML =
+      attrHTML('pit', st.pitOffset) + attrHTML('vel', st.velOffset) +
+      attrHTML('len', st.len)       + attrHTML('sta', st.sta) +
+      attrHTML('prob', st.amt + '%');
+  } else {
+    stepDiv.innerHTML = '<span style="font-size:9px;color:var(--muted)">select a step</span>';
+  }
+
+  // Track attrs
+  document.getElementById('ctx-track').innerHTML =
+    attrHTML('spd', tr.speed)                  +
+    attrHTML('dir', DIR_NAMES[tr.direction] || 'fwd') +
+    attrHTML('len', tr.length)                 +
+    attrHTML('grv', tr.grv)                    +
+    attrHTML('ch',  tr.mch);
+}
+
+function attrHTML(label, value) {
+  return `<div class="attr-item">
+    <div class="attr-label">${label}</div>
+    <div class="attr-value">${value}</div>
+  </div>`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// Transport
+// ══════════════════════════════════════════════════════════════
+document.getElementById('btn-play').addEventListener('click', () => {
+  state.playing = !state.playing;
+  document.getElementById('btn-play').classList.toggle('on', state.playing);
+  maxAPI.send('transport', state.playing ? 1 : 0);
+});
+document.getElementById('btn-stop').addEventListener('click', () => {
+  state.playing = false;
+  document.getElementById('btn-play').classList.remove('on');
+  maxAPI.send('transport', 0);
+});
+document.getElementById('btn-reset').addEventListener('click', () => maxAPI.send('reset_phase'));
+
+// ══════════════════════════════════════════════════════════════
+// Page dots
+// ══════════════════════════════════════════════════════════════
+(function buildPageDots() {
+  const c = document.getElementById('page-dots');
+  for (let p = 0; p < 8; p++) {
+    const d = Object.assign(document.createElement('div'),
+      { className: 'page-dot' + (p === 0 ? ' active' : ''), title: `Page ${p + 1}` });
+    d.addEventListener('click', () => {
+      document.querySelectorAll('.page-dot').forEach(x => x.classList.remove('active'));
+      d.classList.add('active');
+      state.activePage = p;
+      maxAPI.send('set_active_page', state.activeBank, p);
+    });
+    c.appendChild(d);
+  }
+})();
+
+// ══════════════════════════════════════════════════════════════
+// Mutator buttons
+// ══════════════════════════════════════════════════════════════
+document.querySelectorAll('.mut-btn').forEach(btn => {
+  btn.addEventListener('click', () => maxAPI.send(btn.dataset.msg, state.selectedTrack));
+});
+
+// ══════════════════════════════════════════════════════════════
+// Max → HTML  (called via [script <fn> args] from jweb in Max)
+// ══════════════════════════════════════════════════════════════
+
+// [script updateStep ti si active skip hasChord]
+window.updateStep = function(ti, si, active, skip, hasChord) {
+  ti = +ti; si = +si;
+  if (isNaN(ti) || ti < 0 || ti >= T) return;
+  if (isNaN(si) || si < 0 || si >= S) return;
+  const st = state.tracks[ti].steps[si];
+  st.active   = !!+active;
+  st.skip     = !!+skip;
+  st.hasChord = !!+hasChord;
+  renderStep(ti, si);
+  updateCircRing(ti);
+};
+
+// [script updatePlayhead ti pos]
+window.updatePlayhead = function(ti, pos) {
+  ti = +ti; pos = +pos;
+  if (isNaN(ti) || ti < 0 || ti >= T) return;
+  const tr = state.tracks[ti];
+  tr.playheadPos = pos;
+  updatePlayheadDot(ti);
+
+  // Flash active step cell
+  const si = Math.floor(pos) % S;
+  const el = stepEls[ti]?.[si];
+  if (el && tr.steps[si]?.active) {
+    el.classList.remove('flash');
+    requestAnimationFrame(() => el.classList.add('flash'));
+  }
+
+  // Pulse track indicator
+  const ind = document.getElementById(`ind-${ti}`);
+  if (ind) {
+    ind.classList.add('live');
+    clearTimeout(ind._t);
+    ind._t = setTimeout(() => ind.classList.remove('live'), 80);
+  }
+};
+
+// [script setTempo bpm]
+window.setTempo = function(bpm) {
+  state.tempo = Math.round(+bpm);
+  const el = document.getElementById('tempo-val');
+  if (el) el.textContent = state.tempo;
+};
+
+// [script setTransport running]
+window.setTransport = function(running) {
+  state.playing = !!+running;
+  document.getElementById('btn-play').classList.toggle('on', state.playing);
+};
+
+// [script loadPage jsonString]  — bulk state update from Max Dict
+window.loadPage = function(json) {
+  try {
+    const page = JSON.parse(String(json));
+    if (!page?.tracks) return;
+    page.tracks.forEach((t, ti) => {
+      if (ti >= T) return;
+      const tr = state.tracks[ti];
+      tr.length    = t.len       || 16;
+      tr.direction = t.dir       || 1;
+      tr.muted     = !!t.muted;
+      tr.vel       = t.vel       || 100;
+      tr.mch       = t.mch       || 1;
+      tr.grv       = t.grv       || 0;
+      tr.speed     = parseFloat(t.multiplier) || 1;
+      if (t.steps) {
+        t.steps.forEach((s, si) => {
+          if (si >= S) return;
+          const st = tr.steps[si];
+          st.active    = !!s.active;
+          st.skip      = !!s.skip;
+          st.hasChord  = (s.chords?.length || 0) > 0;
+          st.pitOffset = s.pit_offset || 0;
+          st.velOffset = s.vel_offset || 0;
+          st.len       = s.len        || 12;
+          st.sta       = s.sta_offset || 0;
+          st.amt       = s.amt        || 100;
+        });
+      }
+    });
+    renderGrid();
+    buildCirc();
+    updateCtx();
+  } catch (e) { /* silent — Max may send partial updates */ }
+};
+
+// ══════════════════════════════════════════════════════════════
+// Standalone demo animation (skipped when running inside jweb)
+// ══════════════════════════════════════════════════════════════
+if (typeof window.max === 'undefined') {
+  const MS = (60000 / state.tempo) / 4;  // ms per 1/16 note
+  const ticks = new Array(T).fill(0);
+  let lastT = performance.now();
+  let accum = 0;
+
+  function demoFrame(now) {
+    accum += now - lastT;
+    lastT  = now;
+    while (accum >= MS) {
+      accum -= MS;
+      for (let ti = 0; ti < T; ti++) {
+        ticks[ti]++;
+        const len = state.tracks[ti].length;
+        const pos = ticks[ti] % len;
+        state.tracks[ti].playheadPos = pos;
+        updatePlayheadDot(ti);
+
+        const si  = pos % S;
+        const el  = stepEls[ti]?.[si];
+        if (el && state.tracks[ti].steps[si].active) {
+          el.classList.remove('flash');
+          requestAnimationFrame(() => el.classList.add('flash'));
+        }
+        const ind = document.getElementById(`ind-${ti}`);
+        if (ind) {
+          ind.classList.add('live');
+          clearTimeout(ind._t);
+          ind._t = setTimeout(() => ind.classList.remove('live'), 80);
+        }
+      }
+    }
+    requestAnimationFrame(demoFrame);
+  }
+  requestAnimationFrame(demoFrame);
+}
+
+// ══════════════════════════════════════════════════════════════
+// Init
+// ══════════════════════════════════════════════════════════════
+buildGrid();
+buildCirc();
+renderGrid();
+updateCtx();
+</script>
+</body>
+</html>

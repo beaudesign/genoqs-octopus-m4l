@@ -1,0 +1,9 @@
+.DS_Store
+
+# Ableton build artifacts / local backups
+Octopus.amxd.bak-template
+.claude/
+
+# Common temp
+*.tmp
+*.log

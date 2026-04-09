@@ -170,8 +170,7 @@
           "numinlets" : 1,
           "numoutlets" : 1,
           "patching_rect" : [ 20.0, 190.0, 520.0, 320.0 ],
-          "presentation" : 1,
-          "presentation_rect" : [ 0.0, 0.0, 520.0, 520.0 ]
+          "presentation" : 0
         }
       },
       {
@@ -191,8 +190,7 @@
           "numinlets" : 1,
           "numoutlets" : 2,
           "patching_rect" : [ 560.0, 230.0, 220.0, 22.0 ],
-          "presentation" : 1,
-          "presentation_rect" : [ 540.0, 10.0, 240.0, 22.0 ],
+          "presentation" : 0,
           "parameter_enable" : 1,
           "items" : [ "PAGE", "TRACK", "STEP", "GRID" ]
         }
@@ -204,10 +202,38 @@
           "numinlets" : 1,
           "numoutlets" : 2,
           "patching_rect" : [ 560.0, 260.0, 220.0, 22.0 ],
-          "presentation" : 1,
-          "presentation_rect" : [ 540.0, 40.0, 240.0, 22.0 ],
+          "presentation" : 0,
           "parameter_enable" : 1,
           "items" : [ "OCTOPUS_MCH", "FIXED_PER_TRACK" ]
+        }
+      },
+      {
+        "box" : {
+          "id" : "jweb-1",
+          "maxclass" : "jweb",
+          "numinlets" : 1,
+          "numoutlets" : 1,
+          "patching_rect" : [ 20.0, 580.0, 800.0, 520.0 ],
+          "presentation" : 1,
+          "presentation_rect" : [ 0.0, 0.0, 800.0, 520.0 ]
+        }
+      },
+      {
+        "box" : {
+          "id" : "js-jweb-bridge-1",
+          "maxclass" : "js",
+          "text" : "octopus_jweb_bridge.js",
+          "numinlets" : 2,
+          "numoutlets" : 2,
+          "patching_rect" : [ 20.0, 530.0, 200.0, 22.0 ]
+        }
+      },
+      {
+        "box" : {
+          "id" : "msg-get-url-1",
+          "maxclass" : "message",
+          "text" : "get_html_url",
+          "patching_rect" : [ 240.0, 60.0, 100.0, 22.0 ]
         }
       },
       {
@@ -318,7 +344,14 @@
       { "patchline" : { "source" : [ "sel-routing-1", 0 ], "destination" : [ "msg-routing-octo-1", 0 ] } },
       { "patchline" : { "source" : [ "sel-routing-1", 1 ], "destination" : [ "msg-routing-fixed-1", 0 ] } },
       { "patchline" : { "source" : [ "msg-routing-octo-1", 0 ], "destination" : [ "js-data-1", 0 ] } },
-      { "patchline" : { "source" : [ "msg-routing-fixed-1", 0 ], "destination" : [ "js-data-1", 0 ] } }
+      { "patchline" : { "source" : [ "msg-routing-fixed-1", 0 ], "destination" : [ "js-data-1", 0 ] } },
+      { "patchline" : { "source" : [ "loadbang-1", 0 ], "destination" : [ "msg-get-url-1", 0 ] } },
+      { "patchline" : { "source" : [ "msg-get-url-1", 0 ], "destination" : [ "js-ui-1", 0 ] } },
+      { "patchline" : { "source" : [ "js-ui-1", 1 ], "destination" : [ "jweb-1", 0 ] } },
+      { "patchline" : { "source" : [ "jweb-1", 0 ], "destination" : [ "js-jweb-bridge-1", 0 ] } },
+      { "patchline" : { "source" : [ "js-data-1", 0 ], "destination" : [ "js-jweb-bridge-1", 1 ] } },
+      { "patchline" : { "source" : [ "js-jweb-bridge-1", 0 ], "destination" : [ "jweb-1", 0 ] } },
+      { "patchline" : { "source" : [ "js-jweb-bridge-1", 1 ], "destination" : [ "js-data-1", 0 ] } }
     ]
   }
 }
