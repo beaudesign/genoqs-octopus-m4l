@@ -170,7 +170,8 @@
           "numinlets" : 1,
           "numoutlets" : 1,
           "patching_rect" : [ 20.0, 190.0, 520.0, 320.0 ],
-          "presentation" : 0
+          "presentation" : 1,
+          "presentation_rect" : [ 0.0, 0.0, 560.0, 520.0 ]
         }
       },
       {
@@ -190,7 +191,8 @@
           "numinlets" : 1,
           "numoutlets" : 2,
           "patching_rect" : [ 560.0, 230.0, 220.0, 22.0 ],
-          "presentation" : 0,
+          "presentation" : 1,
+          "presentation_rect" : [ 580.0, 20.0, 200.0, 22.0 ],
           "parameter_enable" : 1,
           "items" : [ "PAGE", "TRACK", "STEP", "GRID" ]
         }
@@ -202,38 +204,10 @@
           "numinlets" : 1,
           "numoutlets" : 2,
           "patching_rect" : [ 560.0, 260.0, 220.0, 22.0 ],
-          "presentation" : 0,
+          "presentation" : 1,
+          "presentation_rect" : [ 580.0, 50.0, 200.0, 22.0 ],
           "parameter_enable" : 1,
           "items" : [ "OCTOPUS_MCH", "FIXED_PER_TRACK" ]
-        }
-      },
-      {
-        "box" : {
-          "id" : "jweb-1",
-          "maxclass" : "jweb",
-          "numinlets" : 1,
-          "numoutlets" : 1,
-          "patching_rect" : [ 20.0, 580.0, 800.0, 520.0 ],
-          "presentation" : 1,
-          "presentation_rect" : [ 0.0, 0.0, 800.0, 520.0 ]
-        }
-      },
-      {
-        "box" : {
-          "id" : "js-jweb-bridge-1",
-          "maxclass" : "js",
-          "text" : "octopus_jweb_bridge.js",
-          "numinlets" : 2,
-          "numoutlets" : 2,
-          "patching_rect" : [ 20.0, 530.0, 200.0, 22.0 ]
-        }
-      },
-      {
-        "box" : {
-          "id" : "msg-get-url-1",
-          "maxclass" : "message",
-          "text" : "get_html_url",
-          "patching_rect" : [ 240.0, 60.0, 100.0, 22.0 ]
         }
       },
       {
@@ -313,6 +287,74 @@
           "numoutlets" : 1,
           "patching_rect" : [ 350.0, 100.0, 160.0, 22.0 ]
         }
+      },
+      {
+        "box" : {
+          "id" : "midiin-1",
+          "maxclass" : "newobj",
+          "text" : "midiin",
+          "numinlets" : 1,
+          "numoutlets" : 1,
+          "patching_rect" : [ 560.0, 20.0, 55.0, 22.0 ]
+        }
+      },
+      {
+        "box" : {
+          "id" : "midiout-1",
+          "maxclass" : "newobj",
+          "text" : "midiout",
+          "numinlets" : 1,
+          "numoutlets" : 0,
+          "patching_rect" : [ 560.0, 50.0, 60.0, 22.0 ]
+        }
+      },
+      {
+        "box" : {
+          "id" : "route-engine-1",
+          "maxclass" : "newobj",
+          "text" : "route noteon noteoff cc allnotesoff",
+          "numinlets" : 1,
+          "numoutlets" : 5,
+          "patching_rect" : [ 190.0, 170.0, 270.0, 22.0 ]
+        }
+      },
+      {
+        "box" : {
+          "id" : "midiformat-noteon-1",
+          "maxclass" : "newobj",
+          "text" : "midiformat",
+          "numinlets" : 6,
+          "numoutlets" : 1,
+          "patching_rect" : [ 190.0, 200.0, 80.0, 22.0 ]
+        }
+      },
+      {
+        "box" : {
+          "id" : "midiformat-noteoff-1",
+          "maxclass" : "newobj",
+          "text" : "midiformat",
+          "numinlets" : 6,
+          "numoutlets" : 1,
+          "patching_rect" : [ 280.0, 200.0, 80.0, 22.0 ]
+        }
+      },
+      {
+        "box" : {
+          "id" : "midiformat-cc-1",
+          "maxclass" : "newobj",
+          "text" : "midiformat",
+          "numinlets" : 6,
+          "numoutlets" : 1,
+          "patching_rect" : [ 370.0, 200.0, 80.0, 22.0 ]
+        }
+      },
+      {
+        "box" : {
+          "id" : "msg-allnotesoff-1",
+          "maxclass" : "message",
+          "text" : "176 123 0",
+          "patching_rect" : [ 460.0, 200.0, 70.0, 22.0 ]
+        }
       }
     ],
     "lines" : [
@@ -334,6 +376,15 @@
       { "patchline" : { "source" : [ "transport-1", 6 ], "destination" : [ "prepend-ts-1", 0 ] } },
       { "patchline" : { "source" : [ "prepend-ts-1", 0 ], "destination" : [ "js-engine-1", 0 ] } },
       { "patchline" : { "source" : [ "js-engine-1", 0 ], "destination" : [ "print-engine-1", 0 ] } },
+      { "patchline" : { "source" : [ "js-engine-1", 0 ], "destination" : [ "route-engine-1", 0 ] } },
+      { "patchline" : { "source" : [ "route-engine-1", 0 ], "destination" : [ "midiformat-noteon-1", 0 ] } },
+      { "patchline" : { "source" : [ "route-engine-1", 1 ], "destination" : [ "midiformat-noteoff-1", 0 ] } },
+      { "patchline" : { "source" : [ "route-engine-1", 2 ], "destination" : [ "midiformat-cc-1", 0 ] } },
+      { "patchline" : { "source" : [ "route-engine-1", 3 ], "destination" : [ "msg-allnotesoff-1", 0 ] } },
+      { "patchline" : { "source" : [ "midiformat-noteon-1", 0 ], "destination" : [ "midiout-1", 0 ] } },
+      { "patchline" : { "source" : [ "midiformat-noteoff-1", 0 ], "destination" : [ "midiout-1", 0 ] } },
+      { "patchline" : { "source" : [ "midiformat-cc-1", 0 ], "destination" : [ "midiout-1", 0 ] } },
+      { "patchline" : { "source" : [ "msg-allnotesoff-1", 0 ], "destination" : [ "midiout-1", 0 ] } },
       { "patchline" : { "source" : [ "msg-init-1", 0 ], "destination" : [ "js-data-1", 0 ] } },
       { "patchline" : { "source" : [ "msg-reset-1", 0 ], "destination" : [ "js-data-1", 0 ] } },
       { "patchline" : { "source" : [ "js-data-1", 0 ], "destination" : [ "print-1", 0 ] } },
@@ -344,14 +395,7 @@
       { "patchline" : { "source" : [ "sel-routing-1", 0 ], "destination" : [ "msg-routing-octo-1", 0 ] } },
       { "patchline" : { "source" : [ "sel-routing-1", 1 ], "destination" : [ "msg-routing-fixed-1", 0 ] } },
       { "patchline" : { "source" : [ "msg-routing-octo-1", 0 ], "destination" : [ "js-data-1", 0 ] } },
-      { "patchline" : { "source" : [ "msg-routing-fixed-1", 0 ], "destination" : [ "js-data-1", 0 ] } },
-      { "patchline" : { "source" : [ "loadbang-1", 0 ], "destination" : [ "msg-get-url-1", 0 ] } },
-      { "patchline" : { "source" : [ "msg-get-url-1", 0 ], "destination" : [ "js-ui-1", 0 ] } },
-      { "patchline" : { "source" : [ "js-ui-1", 1 ], "destination" : [ "jweb-1", 0 ] } },
-      { "patchline" : { "source" : [ "jweb-1", 0 ], "destination" : [ "js-jweb-bridge-1", 0 ] } },
-      { "patchline" : { "source" : [ "js-data-1", 0 ], "destination" : [ "js-jweb-bridge-1", 1 ] } },
-      { "patchline" : { "source" : [ "js-jweb-bridge-1", 0 ], "destination" : [ "jweb-1", 0 ] } },
-      { "patchline" : { "source" : [ "js-jweb-bridge-1", 1 ], "destination" : [ "js-data-1", 0 ] } }
+      { "patchline" : { "source" : [ "msg-routing-fixed-1", 0 ], "destination" : [ "js-data-1", 0 ] } }
     ]
   }
 }

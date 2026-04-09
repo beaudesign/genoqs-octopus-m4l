@@ -230,7 +230,8 @@ function tick() {
         var idx = Math.max(0, Math.min(9, Math.round(track.chain_members[cm])));
         if (order.indexOf(idx) === -1) order.push(idx);
       }
-      // Default play order is top-to-bottom on hardware; we keep chain_members as provided by UI layer.
+      // Hardware default play order is top-to-bottom (row 9 -> row 0).
+      order.sort(function (a, b) { return b - a; });
       var memberIdx = rt.chain.memberIdx % order.length;
       var playingTi = order[memberIdx];
       activeTrack = page.tracks[playingTi] || track;
