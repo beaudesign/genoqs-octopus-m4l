@@ -32,9 +32,34 @@ function set_active_page(bank, page) {
   outlet(1, "set_active_page", bank, page);
 }
 
+function set_attr(attr) {
+  if (inlet !== 0) return;
+  outlet(1, "set_attr", attr);
+}
+
+function set_mode(mode) {
+  if (inlet !== 0) return;
+  outlet(1, "set_mode", mode);
+}
+
+function step_pitch(track, step, pitch) {
+  if (inlet !== 0) return;
+  outlet(1, "step_pitch", track, step, pitch);
+}
+
+function set_scale(scaleId) {
+  if (inlet !== 0) return;
+  outlet(1, "set_scale", scaleId);
+}
+
+function rec_toggle() {
+  if (inlet !== 0) return;
+  outlet(1, "rec_toggle");
+}
+
 function transport(running) {
   if (inlet !== 0) return;
-  outlet(1, "transport_state", running);
+  outlet(1, "transport", running);
 }
 
 function reset_phase() {

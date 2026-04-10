@@ -25,6 +25,9 @@
   --yellow-led: #d8c820;
   --accent:     #2650c0;
   --font: "Google Sans",-apple-system,"Helvetica Neue",system-ui,sans-serif;
+  --step-size: clamp(12px, 1.9vw, 22px);
+  --step-gap: 3px;
+  --beat-gap: 5px;
 
   /* ball gradients */
   --ball-lg: radial-gradient(circle at 33% 28%, #dedad0 0%, #aaa49a 38%, #807870 68%, #605850 100%);
@@ -81,13 +84,14 @@ html, body {
 .workspace {
   flex: 1; min-height: 0;
   display: flex;
+  position: relative;
 }
 
 /* ═══════════════════════════════════════════════════
    LEFT PANEL
 ═══════════════════════════════════════════════════ */
 .panel-left {
-  flex: 1; min-width: 0;
+  flex: 1.35; min-width: 0;
   display: flex; flex-direction: column;
   border-right: 1px solid var(--div);
 }
@@ -121,11 +125,12 @@ html, body {
   position: relative;
 }
 .ball-col-label {
-  position: absolute; bottom: -14px; left: 50%;
+  position: absolute; bottom: 2px; left: 50%;
   transform: translateX(-50%);
   font-size: 6px; letter-spacing: .13em;
   text-transform: uppercase; color: var(--muted);
   white-space: nowrap;
+  pointer-events: none;
 }
 .ball-col.mix  { width: 28px; padding: 0 2px; }
 .ball-col.sel  { width: 20px; }
@@ -147,17 +152,17 @@ html, body {
   pointer-events: none;
 }
 .ball.sz-lg {
-  width: 22px; height: 22px;
+  width: calc(var(--step-size) * 1.12); height: calc(var(--step-size) * 1.12);
   background: var(--ball-lg);
   box-shadow: var(--ball-shadow-lg);
 }
 .ball.sz-md {
-  width: 16px; height: 16px;
+  width: calc(var(--step-size) * 0.82); height: calc(var(--step-size) * 0.82);
   background: var(--ball-md);
   box-shadow: var(--ball-shadow);
 }
 .ball.sz-sm {
-  width: 11px; height: 11px;
+  width: calc(var(--step-size) * 0.62); height: calc(var(--step-size) * 0.62);
   background: var(--ball-sm);
   box-shadow: var(--ball-shadow);
 }
@@ -217,11 +222,12 @@ html, body {
 }
 
 .step-cell {
-  width: 100%; aspect-ratio: 1;
+  width: var(--step-size); height: var(--step-size);
   border-radius: 50%;
   background: var(--ball-sm);
   box-shadow: var(--ball-shadow);
   cursor: pointer;
+  flex-shrink: 0;
   align-self: center; justify-self: center;
   position: relative;
   transition: background 55ms, box-shadow 55ms, opacity 55ms;
@@ -269,6 +275,17 @@ html, body {
 }
 .track-led.lit { background: var(--green); box-shadow: 0 0 3px var(--green); }
 
+.grid-row {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--step-gap);
+}
+.beat-gap-spacer {
+  flex: 0 0 var(--beat-gap);
+}
+
 /* ── Bottom function strip ── */
 .bottom-strip {
   flex-shrink: 0;
@@ -277,6 +294,7 @@ html, body {
   gap: 0;
   border-top: 1px solid var(--div);
   padding: 0 4px;
+  min-width: 0;
   overflow: hidden;
 }
 .bs-section {
@@ -284,6 +302,7 @@ html, body {
   padding: 0 10px;
   border-right: 1px solid var(--div);
   height: 100%;
+  min-width: 0;
 }
 .bs-section:last-child { border-right: none; }
 .bs-label {
@@ -318,16 +337,43 @@ html, body {
   border: 1.5px solid var(--muted); cursor: pointer;
   transition: background .1s;
 }
+.page-dot:focus-visible,
+.step-cell:focus-visible,
+.bs-attr:focus-visible {
+  outline: 2px solid rgba(38,80,192,.70);
+  outline-offset: 1px;
+}
 .page-dot.active { background: var(--text); border-color: var(--text); }
 
 /* ═══════════════════════════════════════════════════
    RIGHT PANEL
 ═══════════════════════════════════════════════════ */
 .panel-right {
-  flex: 1; min-width: 0; min-height: 0;
+  flex: 0.95; min-width: 0; min-height: 0;
   display: flex; flex-direction: column;
   position: relative;
   overflow: hidden;
+}
+
+/* Draggable split handle between left/right panels */
+.panel-splitter {
+  flex: 0 0 8px;
+  cursor: col-resize;
+  position: relative;
+  z-index: 5;
+}
+.panel-splitter::before {
+  content: '';
+  position: absolute;
+  left: 50%; top: 0; bottom: 0;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--div);
+}
+.workspace.dragging,
+.workspace.dragging * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 
 /* SVG fills panel */
@@ -342,6 +388,51 @@ html, body {
 
 /* ── Mode LED + label style (in SVG via foreignObject isn't needed;
       we do everything in SVG) ── */
+@media (max-width: 1100px), (max-height: 620px) {
+  :root {
+    --step-size: clamp(10px, 1.8vw, 18px);
+    --step-gap: 2px;
+    --beat-gap: 4px;
+  }
+  .top-bar { height: 22px; padding: 0 10px; }
+  .brand { font-size: 8px; letter-spacing: .10em; }
+  .model { font-size: 13px; letter-spacing: .14em; }
+
+  .panel-left { flex: 1.5; }
+  .panel-right { flex: 0.8; }
+  .panel-splitter { flex-basis: 6px; }
+
+  .matrix-region { padding: 6px 0 4px 0; }
+  .clef-col { width: 14px; }
+  .clef-sym { font-size: 20px; }
+
+  .ball-col.mix, .ball-col.edit { width: 24px; }
+  .ball-col.sel, .ball-col.mut { width: 16px; }
+  .ball-col-label { font-size: 5px; letter-spacing: .09em; bottom: 1px; }
+
+  .bottom-strip { height: 24px; padding: 0 2px; }
+  .bs-section { gap: 4px; padding: 0 6px; }
+  .bs-label { font-size: 5px; letter-spacing: .10em; }
+  .bs-attrs { gap: 5px; }
+  .bs-attr { gap: 1px; }
+  .bs-attr-dot { width: 4px; height: 4px; }
+  .bs-attr-name { font-size: 4.6px; letter-spacing: .05em; }
+  .page-dots { gap: 4px; }
+  .page-dot { width: 5px; height: 5px; border-width: 1px; }
+}
+
+@media (max-width: 900px), (max-height: 520px) {
+  :root {
+    --step-size: clamp(9px, 1.7vw, 15px);
+    --step-gap: 2px;
+    --beat-gap: 3px;
+  }
+  .panel-left { flex: 1.65; }
+  .panel-right { flex: 0.65; }
+  .panel-splitter { flex-basis: 5px; }
+  .bs-section { padding: 0 4px; gap: 3px; }
+  .bottom-strip .bs-section:nth-child(2) .bs-label { display: none; }
+}
 </style>
 </head>
 <body>
@@ -403,6 +494,8 @@ html, body {
 
     </div><!-- .panel-left -->
 
+    <div class="panel-splitter" id="panel-splitter" aria-hidden="true"></div>
+
     <!-- ════ RIGHT PANEL ════ -->
     <div class="panel-right">
       <svg id="right-svg" xmlns="http://www.w3.org/2000/svg"></svg>
@@ -429,6 +522,7 @@ const T = 10, S = 16;
 const ATTR_LABELS = ['VEL','PIT','LEN','STA','POS','DIR','AMT','GRV','MCC','MCH'];
 const NOTE_NAMES  = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const MIX_TARGETS = ['VEL','PIT','LEN','STA','POS','GRV','MCC'];
+const DEFAULT_TRACK_PITS = [57, 55, 52, 50, 48, 60, 62, 64, 67, 69];
 
 // ── Layer 1: Outer Arc buttons ──────────────────────
 const ARC_BTNS = [
@@ -469,10 +563,10 @@ const TRANSPORT = [
   { id:'rec',   sym:'●', ledCol:'red',   on:false },
 ];
 const SCALE_MODES = [
-  { id:'chromatic', lbl:'CHR' },
-  { id:'major',     lbl:'MAJ' },
-  { id:'minor',     lbl:'MIN' },
-  { id:'modal',     lbl:'MOD' },
+  { id:'chr', lbl:'CHR' },
+  { id:'maj', lbl:'MAJ' },
+  { id:'min', lbl:'MIN' },
+  { id:'mod', lbl:'MOD' },
 ];
 
 // ════════════════════════════════════════════════════
@@ -487,7 +581,7 @@ const state = {
   selectedStep:  -1,
   selectedAttr:  'vel',
   mixTarget:     'VEL',
-  scale:         'chromatic',
+  scale:         'chr',
   currentMode:   'page',
   auxActive:     {},
   tracks: Array.from({ length: T }, (_, ti) => ({
@@ -496,6 +590,7 @@ const state = {
     speed:       1,
     muted:       false,
     vel:         100,
+    pit:         DEFAULT_TRACK_PITS[ti] ?? 60,
     mch:         ti + 1,
     grv:         0,
     playheadPos: 0,
@@ -567,7 +662,7 @@ function buildMatrix() {
   for (let row = 0; row < T; row++) {
     const ti = T - 1 - row;
     const rowEl = document.createElement('div');
-    rowEl.style.cssText = 'flex:1;min-height:0;display:flex;align-items:center;gap:3px';
+    rowEl.className = 'grid-row';
 
     const tled = document.createElement('div');
     tled.className = 'track-led';
@@ -579,13 +674,22 @@ function buildMatrix() {
       const cell = document.createElement('div');
       cell.className = 'step-cell';
       cell.dataset.ti = ti; cell.dataset.si = si;
+      cell.setAttribute('role', 'button');
+      cell.setAttribute('tabindex', '0');
+      cell.setAttribute('aria-label', `Track ${ti + 1} step ${si + 1}`);
       cell.addEventListener('mousedown', e => { e.preventDefault(); onStepDown(ti, si, e.shiftKey); });
       cell.addEventListener('mouseenter', () => onStepPaint(ti, si));
+      cell.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onStepDown(ti, si, e.shiftKey);
+        }
+      });
       stepEls[ti][si] = cell;
       rowEl.appendChild(cell);
       if (si < 15 && (si + 1) % 4 === 0) {
         const gap = document.createElement('div');
-        gap.style.cssText = 'flex-shrink:0;width:5px';
+        gap.className = 'beat-gap-spacer';
         rowEl.appendChild(gap);
       }
     }
@@ -595,6 +699,7 @@ function buildMatrix() {
 
 function buildBottomStrip() {
   const strip = document.getElementById('bottom-strip');
+  const compact = window.innerWidth < 980 || window.innerHeight < 560;
 
   const pgSec   = document.createElement('div');
   pgSec.className = 'bs-section';
@@ -602,13 +707,22 @@ function buildBottomStrip() {
   pgLabel.className = 'bs-label'; pgLabel.textContent = 'PAGE';
   const dots = document.createElement('div');
   dots.id = 'page-dots'; dots.className = 'page-dots';
-  for (let p = 0; p < 8; p++) {
+  for (let p = 0; p < 16; p++) {
     const d = document.createElement('div');
     d.className = 'page-dot' + (p === 0 ? ' active' : '');
+    d.setAttribute('role', 'button');
+    d.setAttribute('tabindex', '0');
+    d.setAttribute('aria-label', `Select page ${p + 1}`);
     d.addEventListener('click', () => {
       document.querySelectorAll('.page-dot').forEach(x => x.classList.remove('active'));
       d.classList.add('active'); state.activePage = p;
       maxAPI.send('set_active_page', state.activeBank, p);
+    });
+    d.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        d.click();
+      }
     });
     dots.appendChild(d);
   }
@@ -621,16 +735,26 @@ function buildBottomStrip() {
   mxLabel.className = 'bs-label'; mxLabel.textContent = 'MIX TARGET';
   const mxAttrs = document.createElement('div');
   mxAttrs.className = 'bs-attrs';
-  ATTR_LABELS.forEach(a => {
+  const bottomAttrs = compact ? ['VEL','PIT','LEN','STA','POS','DIR'] : ATTR_LABELS;
+  bottomAttrs.forEach(a => {
     const item = document.createElement('div');
     item.className = 'bs-attr' + (a.toLowerCase() === state.selectedAttr ? ' active' : '');
     item.dataset.attr = a.toLowerCase();
+    item.setAttribute('role', 'button');
+    item.setAttribute('tabindex', '0');
+    item.setAttribute('aria-label', `Select mix target ${a}`);
     const dot  = document.createElement('div');
     dot.className = 'bs-attr-dot' + (a.toLowerCase() === state.selectedAttr ? ' on' : '');
     const name = document.createElement('div');
     name.className = 'bs-attr-name'; name.textContent = a;
     item.append(dot, name);
     item.addEventListener('click', () => selectAttr(a.toLowerCase()));
+    item.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        selectAttr(a.toLowerCase());
+      }
+    });
     mxAttrs.appendChild(item);
   });
   mxSec.append(mxLabel, mxAttrs);
@@ -945,12 +1069,13 @@ function buildCenterCluster(svg, defs) {
   const bR = Math.max(4.5, svgH * 0.010);
   const lR = 1.9;
   // Push cluster slightly down to avoid competing with pitch labels.
-  const gx = CX, gy = CY + R_SPIR * 0.62;
+  const gx = CX, gy = CY + R_SPIR * 0.78;
 
-  // Transport row
+  // Transport row (reduced to core controls for center clarity)
   const tpY = gy - bR * 3.5;
-  TRANSPORT.forEach((t, i) => {
-    const tx  = gx + (i - (TRANSPORT.length - 1) / 2) * (bR * 2.6);
+  const visibleTransport = TRANSPORT.filter(t => t.id === 'stop' || t.id === 'play');
+  visibleTransport.forEach((t, i) => {
+    const tx  = gx + (i - (visibleTransport.length - 1) / 2) * (bR * 3.4);
     const gid = `tpg-${t.id}`;
     const gr  = mkEl('radialGradient', { id: gid, cx:'35%', cy:'30%', r:'65%', fx:'35%', fy:'30%' });
     gr.innerHTML = t.on
@@ -978,29 +1103,8 @@ function buildCenterCluster(svg, defs) {
     svg.appendChild(g);
   });
 
-  // Scale row (no header text — keep the center uncluttered)
-  const scY = gy + bR * 0.35;
-
-  SCALE_MODES.forEach((sc, i) => {
-    const sx       = gx + (i - (SCALE_MODES.length - 1) / 2) * (bR * 2.2);
-    const isActive = sc.id === state.scale;
-    const g   = mkEl('g', { cursor: 'pointer', id: `sc-${sc.id}` });
-    const ball = mkEl('circle', {
-      cx: sx, cy: scY, r: (bR * 0.70).toFixed(1),
-      fill: isActive ? 'rgba(28,24,16,.52)' : 'rgba(28,24,16,.09)',
-      stroke: 'rgba(28,24,16,.18)', 'stroke-width': '0.6',
-    });
-    const lbl = mkEl('text', {
-      x: sx, y: (scY + bR * 1.6).toFixed(1),
-      'text-anchor': 'middle', 'font-size': (fs * 0.56).toFixed(1),
-      'font-family': '-apple-system,Helvetica Neue,sans-serif',
-      fill: isActive ? 'rgba(28,24,16,.68)' : 'rgba(28,24,16,.28)',
-    });
-    lbl.textContent = sc.lbl;
-    g.append(ball, lbl);
-    g.addEventListener('click', () => onScaleMode(sc.id));
-    svg.appendChild(g);
-  });
+  // Scale mode micro-cluster removed from center for usability.
+  // We'll keep scale selection elsewhere in the UI to avoid central crowding.
 
   // Main encoder (top-right quadrant)
   const eR  = Math.max(10, svgH * 0.030);
@@ -1063,7 +1167,8 @@ function updatePitchNodes() {
   PITCH_NODES.forEach((node, n) => {
     const els = pitchNodeEls[n];
     if (!els) return;
-    const isAssigned = selStep && selStep.pitOffset === node.midi;
+    const selBasePit = selTrack ? (selTrack.pit ?? 60) : 60;
+    const isAssigned = selStep && (selBasePit + (selStep.pitOffset || 0) === node.midi);
     const isC        = node.pc === 0;
     let fill, stroke, r;
     if (isAssigned) {
@@ -1112,8 +1217,11 @@ function onRingTarget(tgt) {
 function onPitchNode(n) {
   const node = PITCH_NODES[n];
   if (!node || state.selectedTrack < 0 || state.selectedStep < 0) return;
-  state.tracks[state.selectedTrack].steps[state.selectedStep].pitOffset = node.midi;
-  maxAPI.send('step_pitch', state.selectedTrack, state.selectedStep, node.midi);
+  const tr = state.tracks[state.selectedTrack];
+  // Engine/data model uses pitOffset as a relative semitone offset from track PIT.
+  const relPitOffset = node.midi - (tr.pit ?? 60);
+  tr.steps[state.selectedStep].pitOffset = relPitOffset;
+  maxAPI.send('step_pitch', state.selectedTrack, state.selectedStep, relPitOffset);
   updatePitchNodes();
 }
 
@@ -1173,12 +1281,14 @@ window.loadPage = json => {
       const tr = state.tracks[ti];
       if (t.len)           tr.length    = t.len;
       if (t.dir)           tr.direction = t.dir;
+      if (t.pit != null)   tr.pit       = +t.pit;
       if (t.muted != null) tr.muted     = !!t.muted;
       if (t.steps) t.steps.forEach((s, si) => {
         if (si >= S) return;
         const st = tr.steps[si];
         if (s.active != null)  st.active   = !!s.active;
         if (s.skip   != null)  st.skip     = !!s.skip;
+        if (s.pit_offset != null) st.pitOffset = +s.pit_offset;
         if (s.chords != null)  st.hasChord = (s.chords?.length || 0) > 0;
       });
     });
@@ -1234,13 +1344,66 @@ if (typeof window.max === 'undefined') {
 // ════════════════════════════════════════════════════
 // Resize + Init
 // ════════════════════════════════════════════════════
-const ro = new ResizeObserver(() => buildRightPanel());
+let _rightPanelRaf = 0;
+function scheduleRightPanelRebuild() {
+  if (_rightPanelRaf) cancelAnimationFrame(_rightPanelRaf);
+  _rightPanelRaf = requestAnimationFrame(() => {
+    _rightPanelRaf = 0;
+    buildRightPanel();
+  });
+}
+const ro = new ResizeObserver(() => scheduleRightPanelRebuild());
 ro.observe(document.querySelector('.panel-right'));
+
+// Draggable panel split (Ableton-like narrow layout control)
+(function initPanelSplitter() {
+  const workspace = document.querySelector('.workspace');
+  const left = document.querySelector('.panel-left');
+  const right = document.querySelector('.panel-right');
+  const splitter = document.getElementById('panel-splitter');
+  if (!workspace || !left || !right || !splitter) return;
+
+  let dragging = false;
+  const minPct = 52;
+  const maxPct = 84;
+
+  function setSplitFromClientX(clientX) {
+    const rect = workspace.getBoundingClientRect();
+    if (!rect.width) return;
+    let pct = ((clientX - rect.left) / rect.width) * 100;
+    pct = Math.max(minPct, Math.min(maxPct, pct));
+    left.style.flex = `0 0 ${pct}%`;
+    right.style.flex = `1 1 ${100 - pct}%`;
+    scheduleRightPanelRebuild();
+  }
+
+  splitter.addEventListener('pointerdown', e => {
+    dragging = true;
+    workspace.classList.add('dragging');
+    splitter.setPointerCapture(e.pointerId);
+    setSplitFromClientX(e.clientX);
+  });
+
+  splitter.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    setSplitFromClientX(e.clientX);
+  });
+
+  function endDrag(e) {
+    if (!dragging) return;
+    dragging = false;
+    workspace.classList.remove('dragging');
+    try { splitter.releasePointerCapture(e.pointerId); } catch (_) {}
+  }
+
+  splitter.addEventListener('pointerup', endDrag);
+  splitter.addEventListener('pointercancel', endDrag);
+})();
 
 buildMatrix();
 buildBottomStrip();
 renderGrid();
-requestAnimationFrame(() => buildRightPanel());
+requestAnimationFrame(() => scheduleRightPanelRebuild());
 </script>
 </body>
 </html>

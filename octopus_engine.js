@@ -129,7 +129,15 @@ function _resolvePortChan(mch, routingMode, fixedRouting, trackIndex) {
 }
 
 function _schedule(ev) {
-  eventQ.push(ev);
+  // Keep queue sorted by event tick for efficient due-event flushing.
+  var lo = 0;
+  var hi = eventQ.length;
+  while (lo < hi) {
+    var mid = (lo + hi) >> 1;
+    if (eventQ[mid].t <= ev.t) lo = mid + 1;
+    else hi = mid;
+  }
+  eventQ.splice(lo, 0, ev);
 }
 
 function _strumOffsetTicks(levelAbs, noteNumber1Based) {
@@ -154,23 +162,26 @@ function _strumOffsetTicks(levelAbs, noteNumber1Based) {
 
 function _flushDueEvents(nowTick) {
   if (!eventQ.length) return;
-  // Stable-ish: single pass filter.
-  var keep = [];
-  for (var i = 0; i < eventQ.length; i++) {
+  // Since queue is sorted by tick, due events are always a prefix.
+  var i = 0;
+  while (i < eventQ.length && eventQ[i].t <= nowTick) {
     var ev = eventQ[i];
-    if (ev.t <= nowTick) {
-      if (ev.type === "noteon") outlet(0, "noteon", ev.port, ev.ch, ev.pitch, ev.vel);
-      else if (ev.type === "noteoff") outlet(0, "noteoff", ev.port, ev.ch, ev.pitch, ev.vel || 0);
-      else if (ev.type === "cc") outlet(0, "cc", ev.port, ev.ch, ev.cc, ev.val);
-    } else {
-      keep.push(ev);
-    }
+    if (ev.type === "noteon") outlet(0, "noteon", ev.port, ev.ch, ev.pitch, ev.vel);
+    else if (ev.type === "noteoff") outlet(0, "noteoff", ev.port, ev.ch, ev.pitch, ev.vel || 0);
+    else if (ev.type === "cc") outlet(0, "cc", ev.port, ev.ch, ev.cc, ev.val);
+    i++;
   }
-  eventQ = keep;
+  if (i > 0) eventQ = eventQ.slice(i);
 }
 
 function _allNotesOff() {
-  // Let patcher decide how to fan out; we just emit a panic message.
+  // Emit CC123 (all notes off) across both ports/channels for robust panic behavior.
+  for (var port = 1; port <= 2; port++) {
+    for (var ch = 1; ch <= 16; ch++) {
+      outlet(0, "cc", port, ch, 123, 0);
+    }
+  }
+  // Keep legacy panic event for any existing patcher listeners.
   outlet(0, "allnotesoff");
   eventQ = [];
   for (var t = 0; t < trackRt.length; t++) trackRt[t].held = {};
@@ -222,7 +233,8 @@ function tick() {
     var activeTrack = track;
     var baseTrack = track;
     var rt = trackRt[ti];
-    var pageLen = Math.max(1, Math.min(128, Math.round(page.len || 16)));
+    // MVP guard: UI exposes 16 physical steps, so keep runtime page length in that range.
+    var pageLen = Math.max(1, Math.min(16, Math.round(page.len || 16)));
 
     if (isChainHead) {
       var order = [ti];

@@ -212,6 +212,172 @@
       },
       {
         "box" : {
+          "id" : "live-tab-mix-1",
+          "maxclass" : "live.tab",
+          "numinlets" : 1,
+          "numoutlets" : 2,
+          "patching_rect" : [ 560.0, 350.0, 260.0, 22.0 ],
+          "presentation" : 1,
+          "presentation_rect" : [ 580.0, 80.0, 200.0, 22.0 ],
+          "parameter_enable" : 1,
+          "items" : [ "VEL", "PIT", "LEN", "STA", "POS", "DIR", "AMT", "GRV", "MCC", "MCH" ]
+        }
+      },
+      {
+        "box" : {
+          "id" : "prepend-mix-index-1",
+          "maxclass" : "newobj",
+          "text" : "prepend mix_index",
+          "numinlets" : 1,
+          "numoutlets" : 1,
+          "patching_rect" : [ 560.0, 380.0, 120.0, 22.0 ]
+        }
+      },
+      {
+        "box" : {
+          "id" : "live-tab-scale-enable-1",
+          "maxclass" : "live.tab",
+          "numinlets" : 1,
+          "numoutlets" : 2,
+          "patching_rect" : [ 560.0, 410.0, 190.0, 22.0 ],
+          "presentation" : 1,
+          "presentation_rect" : [ 580.0, 110.0, 200.0, 22.0 ],
+          "parameter_enable" : 1,
+          "items" : [ "SCALE_OFF", "SCALE_ON" ]
+        }
+      },
+      {
+        "box" : {
+          "id" : "sel-scale-enable-1",
+          "maxclass" : "newobj",
+          "text" : "sel 0 1",
+          "numinlets" : 1,
+          "numoutlets" : 3,
+          "patching_rect" : [ 560.0, 440.0, 70.0, 22.0 ]
+        }
+      },
+      {
+        "box" : {
+          "id" : "msg-scale-off-1",
+          "maxclass" : "message",
+          "text" : "set_scale_enabled 0",
+          "patching_rect" : [ 640.0, 440.0, 130.0, 22.0 ]
+        }
+      },
+      {
+        "box" : {
+          "id" : "msg-scale-on-1",
+          "maxclass" : "message",
+          "text" : "set_scale_enabled 1",
+          "patching_rect" : [ 780.0, 440.0, 130.0, 22.0 ]
+        }
+      },
+      {
+        "box" : {
+          "id" : "live-tab-scale-mode-1",
+          "maxclass" : "live.tab",
+          "numinlets" : 1,
+          "numoutlets" : 2,
+          "patching_rect" : [ 560.0, 470.0, 210.0, 22.0 ],
+          "presentation" : 1,
+          "presentation_rect" : [ 580.0, 140.0, 200.0, 22.0 ],
+          "parameter_enable" : 1,
+          "items" : [ "CHR", "MAJ", "MIN", "MOD" ]
+        }
+      },
+      {
+        "box" : {
+          "id" : "sel-scale-mode-1",
+          "maxclass" : "newobj",
+          "text" : "sel 0 1 2 3",
+          "numinlets" : 1,
+          "numoutlets" : 5,
+          "patching_rect" : [ 560.0, 500.0, 100.0, 22.0 ]
+        }
+      },
+      {
+        "box" : {
+          "id" : "msg-scale-chr-1",
+          "maxclass" : "message",
+          "text" : "set_scale chr",
+          "patching_rect" : [ 670.0, 500.0, 95.0, 22.0 ]
+        }
+      },
+      {
+        "box" : {
+          "id" : "msg-scale-maj-1",
+          "maxclass" : "message",
+          "text" : "set_scale maj",
+          "patching_rect" : [ 770.0, 500.0, 95.0, 22.0 ]
+        }
+      },
+      {
+        "box" : {
+          "id" : "msg-scale-min-1",
+          "maxclass" : "message",
+          "text" : "set_scale min",
+          "patching_rect" : [ 870.0, 500.0, 95.0, 22.0 ]
+        }
+      },
+      {
+        "box" : {
+          "id" : "msg-scale-mod-1",
+          "maxclass" : "message",
+          "text" : "set_scale mod",
+          "patching_rect" : [ 970.0, 500.0, 95.0, 22.0 ]
+        }
+      },
+      {
+        "box" : {
+          "id" : "live-tab-transport-1",
+          "maxclass" : "live.tab",
+          "numinlets" : 1,
+          "numoutlets" : 2,
+          "patching_rect" : [ 560.0, 530.0, 120.0, 22.0 ],
+          "presentation" : 1,
+          "presentation_rect" : [ 580.0, 170.0, 200.0, 22.0 ],
+          "parameter_enable" : 1,
+          "items" : [ "STOP", "PLAY" ]
+        }
+      },
+      {
+        "box" : {
+          "id" : "sel-transport-1",
+          "maxclass" : "newobj",
+          "text" : "sel 0 1",
+          "numinlets" : 1,
+          "numoutlets" : 3,
+          "patching_rect" : [ 690.0, 530.0, 70.0, 22.0 ]
+        }
+      },
+      {
+        "box" : {
+          "id" : "prepend-transport-1",
+          "maxclass" : "newobj",
+          "text" : "prepend transport",
+          "numinlets" : 1,
+          "numoutlets" : 1,
+          "patching_rect" : [ 560.0, 560.0, 120.0, 22.0 ]
+        }
+      },
+      {
+        "box" : {
+          "id" : "msg-transport-stop-1",
+          "maxclass" : "message",
+          "text" : "transport_state 0",
+          "patching_rect" : [ 770.0, 530.0, 120.0, 22.0 ]
+        }
+      },
+      {
+        "box" : {
+          "id" : "msg-transport-play-1",
+          "maxclass" : "message",
+          "text" : "transport_state 1",
+          "patching_rect" : [ 900.0, 530.0, 120.0, 22.0 ]
+        }
+      },
+      {
+        "box" : {
           "id" : "sel-routing-1",
           "maxclass" : "newobj",
           "text" : "sel 0 1",
@@ -312,9 +478,9 @@
         "box" : {
           "id" : "route-engine-1",
           "maxclass" : "newobj",
-          "text" : "route noteon noteoff cc allnotesoff",
+          "text" : "route noteon noteoff cc",
           "numinlets" : 1,
-          "numoutlets" : 5,
+          "numoutlets" : 4,
           "patching_rect" : [ 190.0, 170.0, 270.0, 22.0 ]
         }
       },
@@ -371,26 +537,45 @@
       { "patchline" : { "source" : [ "gt-1", 0 ], "destination" : [ "edge-1", 0 ] } },
       { "patchline" : { "source" : [ "edge-1", 0 ], "destination" : [ "gate-1", 0 ] } },
       { "patchline" : { "source" : [ "gate-1", 0 ], "destination" : [ "msg-tick-1", 0 ] } },
-      { "patchline" : { "source" : [ "msg-tick-1", 0 ], "destination" : [ "print-tick-1", 0 ] } },
       { "patchline" : { "source" : [ "msg-tick-1", 0 ], "destination" : [ "js-engine-1", 0 ] } },
       { "patchline" : { "source" : [ "transport-1", 6 ], "destination" : [ "prepend-ts-1", 0 ] } },
       { "patchline" : { "source" : [ "prepend-ts-1", 0 ], "destination" : [ "js-engine-1", 0 ] } },
-      { "patchline" : { "source" : [ "js-engine-1", 0 ], "destination" : [ "print-engine-1", 0 ] } },
       { "patchline" : { "source" : [ "js-engine-1", 0 ], "destination" : [ "route-engine-1", 0 ] } },
       { "patchline" : { "source" : [ "route-engine-1", 0 ], "destination" : [ "midiformat-noteon-1", 0 ] } },
       { "patchline" : { "source" : [ "route-engine-1", 1 ], "destination" : [ "midiformat-noteoff-1", 0 ] } },
       { "patchline" : { "source" : [ "route-engine-1", 2 ], "destination" : [ "midiformat-cc-1", 0 ] } },
-      { "patchline" : { "source" : [ "route-engine-1", 3 ], "destination" : [ "msg-allnotesoff-1", 0 ] } },
       { "patchline" : { "source" : [ "midiformat-noteon-1", 0 ], "destination" : [ "midiout-1", 0 ] } },
       { "patchline" : { "source" : [ "midiformat-noteoff-1", 0 ], "destination" : [ "midiout-1", 0 ] } },
       { "patchline" : { "source" : [ "midiformat-cc-1", 0 ], "destination" : [ "midiout-1", 0 ] } },
-      { "patchline" : { "source" : [ "msg-allnotesoff-1", 0 ], "destination" : [ "midiout-1", 0 ] } },
       { "patchline" : { "source" : [ "msg-init-1", 0 ], "destination" : [ "js-data-1", 0 ] } },
       { "patchline" : { "source" : [ "msg-reset-1", 0 ], "destination" : [ "js-data-1", 0 ] } },
-      { "patchline" : { "source" : [ "js-data-1", 0 ], "destination" : [ "print-1", 0 ] } },
       { "patchline" : { "source" : [ "jsui-matrix-1", 0 ], "destination" : [ "js-data-1", 0 ] } },
       { "patchline" : { "source" : [ "live-tab-mode-1", 0 ], "destination" : [ "js-ui-1", 0 ] } },
       { "patchline" : { "source" : [ "js-ui-1", 0 ], "destination" : [ "jsui-matrix-1", 0 ] } },
+      { "patchline" : { "source" : [ "js-ui-1", 1 ], "destination" : [ "js-data-1", 0 ] } },
+      { "patchline" : { "source" : [ "live-tab-mix-1", 0 ], "destination" : [ "prepend-mix-index-1", 0 ] } },
+      { "patchline" : { "source" : [ "prepend-mix-index-1", 0 ], "destination" : [ "js-ui-1", 0 ] } },
+      { "patchline" : { "source" : [ "live-tab-scale-enable-1", 0 ], "destination" : [ "sel-scale-enable-1", 0 ] } },
+      { "patchline" : { "source" : [ "sel-scale-enable-1", 0 ], "destination" : [ "msg-scale-off-1", 0 ] } },
+      { "patchline" : { "source" : [ "sel-scale-enable-1", 1 ], "destination" : [ "msg-scale-on-1", 0 ] } },
+      { "patchline" : { "source" : [ "msg-scale-off-1", 0 ], "destination" : [ "js-data-1", 0 ] } },
+      { "patchline" : { "source" : [ "msg-scale-on-1", 0 ], "destination" : [ "js-data-1", 0 ] } },
+      { "patchline" : { "source" : [ "live-tab-scale-mode-1", 0 ], "destination" : [ "sel-scale-mode-1", 0 ] } },
+      { "patchline" : { "source" : [ "sel-scale-mode-1", 0 ], "destination" : [ "msg-scale-chr-1", 0 ] } },
+      { "patchline" : { "source" : [ "sel-scale-mode-1", 1 ], "destination" : [ "msg-scale-maj-1", 0 ] } },
+      { "patchline" : { "source" : [ "sel-scale-mode-1", 2 ], "destination" : [ "msg-scale-min-1", 0 ] } },
+      { "patchline" : { "source" : [ "sel-scale-mode-1", 3 ], "destination" : [ "msg-scale-mod-1", 0 ] } },
+      { "patchline" : { "source" : [ "msg-scale-chr-1", 0 ], "destination" : [ "js-data-1", 0 ] } },
+      { "patchline" : { "source" : [ "msg-scale-maj-1", 0 ], "destination" : [ "js-data-1", 0 ] } },
+      { "patchline" : { "source" : [ "msg-scale-min-1", 0 ], "destination" : [ "js-data-1", 0 ] } },
+      { "patchline" : { "source" : [ "msg-scale-mod-1", 0 ], "destination" : [ "js-data-1", 0 ] } },
+      { "patchline" : { "source" : [ "live-tab-transport-1", 0 ], "destination" : [ "sel-transport-1", 0 ] } },
+      { "patchline" : { "source" : [ "live-tab-transport-1", 0 ], "destination" : [ "prepend-transport-1", 0 ] } },
+      { "patchline" : { "source" : [ "prepend-transport-1", 0 ], "destination" : [ "js-data-1", 0 ] } },
+      { "patchline" : { "source" : [ "sel-transport-1", 0 ], "destination" : [ "msg-transport-stop-1", 0 ] } },
+      { "patchline" : { "source" : [ "sel-transport-1", 1 ], "destination" : [ "msg-transport-play-1", 0 ] } },
+      { "patchline" : { "source" : [ "msg-transport-stop-1", 0 ], "destination" : [ "js-engine-1", 0 ] } },
+      { "patchline" : { "source" : [ "msg-transport-play-1", 0 ], "destination" : [ "js-engine-1", 0 ] } },
       { "patchline" : { "source" : [ "live-tab-routing-1", 0 ], "destination" : [ "sel-routing-1", 0 ] } },
       { "patchline" : { "source" : [ "sel-routing-1", 0 ], "destination" : [ "msg-routing-octo-1", 0 ] } },
       { "patchline" : { "source" : [ "sel-routing-1", 1 ], "destination" : [ "msg-routing-fixed-1", 0 ] } },
