@@ -22,7 +22,7 @@ var cols = 16;
 var cell = 14;
 var gap = 2;
 var padLeft = 40;
-var padTop = 30;
+var padTop = 42;
 
 var mode = "page"; // page|track|step|grid
 var selectedTrack = 0;
@@ -61,18 +61,39 @@ function _getStep(trackIx, stepIx) {
   return { active: active, skip: skip, hasChord: hasChord };
 }
 
+function _getActivePageSnapshot() {
+  var d = new Dict(STATE_DICT_NAME);
+  var ap = d.get("active_page") || { bank: 0, page: 0 };
+  var bank = _clampInt(ap.bank, 0, 9);
+  var page = _clampInt(ap.page, 0, 15);
+  var pageObj = d.get(["banks", bank, "pages", page].join("::")) || {};
+  var tracks = pageObj.tracks || [];
+  return { d: d, bank: bank, page: page, pageObj: pageObj, tracks: tracks };
+}
+
 function paint() {
   var g = mgraphics;
+  var snapHdr = _getActivePageSnapshot();
+  var uiMode = String(snapHdr.d.get("ui_mode") || mode || "page").toLowerCase();
+  var uiMix = String(snapHdr.d.get("ui_mix_target") || selectedAttr || "vel").toLowerCase();
+  var scalePath = ["banks", snapHdr.bank, "pages", snapHdr.page, "scale"].join("::");
+  var scaleEnabled = !!snapHdr.d.get(scalePath + "::enabled");
+  var scaleMode = String(snapHdr.d.get(scalePath + "::mode") || "maj").toUpperCase();
+  mode = uiMode;
+  selectedAttr = uiMix;
+
   g.set_source_rgba(colors.bg);
   g.rectangle(0, 0, box.rect[2], box.rect[3]);
   g.fill();
 
-  // Labels
+  // Persistent context labels (mode + edit lens + focus + page scale state)
   g.set_source_rgba(colors.label);
   g.select_font_face("Courier", "normal", "normal");
   g.set_font_size(10);
   g.move_to(8, 18);
-  g.show_text(mode.toUpperCase());
+  g.show_text("MODE " + mode.toUpperCase() + "  ATR " + selectedAttr.toUpperCase() + "  TRK " + selectedTrack + "  STP " + selectedStep);
+  g.move_to(8, 30);
+  g.show_text("BANK " + snapHdr.bank + "  PAGE " + snapHdr.page + "  SCALE " + (scaleEnabled ? "ON" : "OFF") + " " + scaleMode);
 
   if (mode === "grid") {
     _paintGrid(g);
@@ -87,6 +108,7 @@ function paint() {
     return;
   }
 
+  var snap = _getActivePageSnapshot();
   // Draw grid
   for (var r = 0; r < rows; r++) {
     // track label
@@ -97,7 +119,12 @@ function paint() {
     for (var c = 0; c < cols; c++) {
       var x = padLeft + c * (cell + gap);
       var y = padTop + r * (cell + gap);
-      var st = _getStep(r, c);
+      var stObj = (snap.tracks[r] && snap.tracks[r].steps) ? snap.tracks[r].steps[c] : null;
+      var st = {
+        active: !!(stObj && stObj.active),
+        skip: !!(stObj && stObj.skip),
+        hasChord: !!(stObj && stObj.chords && stObj.chords.length > 0),
+      };
 
       var fill = colors.off;
       if (st.skip && st.active) fill = colors.skip; // MVP: no flashing, just red
@@ -150,10 +177,18 @@ function _paintTrack(g) {
   g.move_to(8, 36);
   g.show_text("TRK " + selectedTrack + "  ATR " + selectedAttr.toUpperCase());
 
+  var snap = _getActivePageSnapshot();
+  var tr = snap.tracks[selectedTrack] || {};
+  var trSteps = tr.steps || [];
   for (var c = 0; c < cols; c++) {
     var x = padLeft + c * (cell + gap);
     var y = padTop;
-    var st = _getStep(selectedTrack, c);
+    var stObj = trSteps[c] || null;
+    var st = {
+      active: !!(stObj && stObj.active),
+      skip: !!(stObj && stObj.skip),
+      hasChord: !!(stObj && stObj.chords && stObj.chords.length > 0),
+    };
     var fill = st.active ? colors.active : colors.off;
     if (st.skip) fill = colors.skip;
     g.set_source_rgba(fill);
@@ -165,11 +200,8 @@ function _paintTrack(g) {
   }
 
   // Rows 1-9: simple bar map for selected attribute (MVP: vel_offset only)
-  var d = new Dict(STATE_DICT_NAME);
-  var ap = d.get("active_page") || { bank: 0, page: 0 };
-  var bank = _clampInt(ap.bank, 0, 9);
-  var page = _clampInt(ap.page, 0, 15);
-  var base = ["banks", bank, "pages", page, "tracks", selectedTrack, "steps"].join("::");
+  var d = snap.d;
+  var base = ["banks", snap.bank, "pages", snap.page, "tracks", selectedTrack, "steps"].join("::");
 
   for (var c2 = 0; c2 < cols; c2++) {
     var stepBase = base + "::" + c2;
@@ -201,11 +233,9 @@ function _paintTrack(g) {
 }
 
 function _paintStep(g) {
-  var d = new Dict(STATE_DICT_NAME);
-  var ap = d.get("active_page") || { bank: 0, page: 0 };
-  var bank = _clampInt(ap.bank, 0, 9);
-  var page = _clampInt(ap.page, 0, 15);
-  var base = ["banks", bank, "pages", page, "tracks", selectedTrack, "steps", selectedStep].join("::");
+  var snap = _getActivePageSnapshot();
+  var d = snap.d;
+  var base = ["banks", snap.bank, "pages", snap.page, "tracks", selectedTrack, "steps", selectedStep].join("::");
 
   var active = !!d.get(base + "::active");
   var skip = !!d.get(base + "::skip");
